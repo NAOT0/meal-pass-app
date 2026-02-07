@@ -148,32 +148,40 @@ export default function ScannerScreen() {
             </View>
         </View>
 
-        {/* Torch */}
-        <View className="absolute bottom-10 left-0 right-0 items-center justify-center" style={{ paddingBottom: insets.bottom }}>
+        {/* Bottom Controls */}
+        <View className="absolute bottom-10 left-0 right-0 px-6 flex-row justify-between items-center" style={{ marginBottom: insets.bottom }}>
+            {/* Close Button (Left) */}
+            <TouchableOpacity
+                onPress={() => router.back()}
+                className="w-14 h-14 rounded-full bg-gray-800/80 border border-gray-600 items-center justify-center shadow-lg"
+            >
+                <X size={24} color="white" />
+            </TouchableOpacity>
+
+            {/* Torch (Center) */}
             <TouchableOpacity
                 onPress={() => setTorchOn(!torchOn)}
                 className={`w-14 h-14 rounded-full items-center justify-center ${torchOn ? 'bg-white' : 'bg-gray-800/80 border border-gray-600'}`}
             >
                 {torchOn ? <Flashlight size={24} color="black" /> : <FlashlightOff size={24} color="#9CA3AF" />}
             </TouchableOpacity>
-        </View>
 
-        {/* Cart FAB */}
-        <TouchableOpacity 
-            activeOpacity={0.8}
-            onPress={() => router.push('/cart')}
-            className="absolute right-6 bg-emerald-500 w-16 h-16 rounded-full items-center justify-center shadow-lg"
-            style={{ bottom: insets.bottom + 40 }}
-        >
-             <ShoppingCart size={28} color="white" />
-             {currentList.filter(i => lockedIds.has(i.id)).length > 0 && (
-                 <View className="absolute -top-1 -right-1 bg-red-500 w-6 h-6 rounded-full items-center justify-center border border-white">
-                     <Text className="text-white text-xs font-bold">
-                         {currentList.filter(i => lockedIds.has(i.id)).length}
-                     </Text>
-                 </View>
-             )}
-        </TouchableOpacity>
+            {/* Cart FAB (Right) */}
+            <TouchableOpacity 
+                activeOpacity={0.8}
+                onPress={() => router.push('/cart')}
+                className="bg-emerald-500 w-16 h-16 rounded-full items-center justify-center shadow-lg"
+            >
+                 <ShoppingCart size={28} color="white" />
+                 {currentList.filter(i => lockedIds.has(i.id)).length > 0 && (
+                     <View className="absolute -top-1 -right-1 bg-red-500 w-6 h-6 rounded-full items-center justify-center border border-white">
+                         <Text className="text-white text-xs font-bold">
+                             {currentList.filter(i => lockedIds.has(i.id)).length}
+                         </Text>
+                     </View>
+                 )}
+            </TouchableOpacity>
+        </View>
 
         {/* Toast */}
         {toastMessage && (
