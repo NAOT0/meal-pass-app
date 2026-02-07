@@ -10,8 +10,9 @@ export default function Root({ children }: PropsWithChildren) {
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
         
-        {/* ▼▼▼ PWA設定：マニフェストだけでなく、アイコンも直接指定する ▼▼▼ */}
-        <link rel="manifest" href="/manifest.json" />
+        {/* ▼▼▼ PWA/アイコン設定：相対パスにして favicon も明示する ▼▼▼ */}
+        <link rel="manifest" href="/site.webmanifest" />
+        <link rel="icon" href="/icon-512.png" />
         <link rel="apple-touch-icon" href="/icon-512.png" />
         <meta name="theme-color" content="#ffffff" />
         {/* ▲▲▲▲▲▲ */}

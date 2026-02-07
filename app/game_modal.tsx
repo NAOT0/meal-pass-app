@@ -28,21 +28,7 @@ export default function GameModal() {
   useEffect(() => {
     fetchUnverifiedProducts();
   }, []);
-  useEffect(() => {
-    // Web版かつ、ServiceWorkerが使える環境なら登録する
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then(
-          (registration) => {
-            console.log('SW registered: ', registration);
-          },
-          (err) => {
-            console.log('SW registration failed: ', err);
-          }
-        );
-      });
-    }
-  }, []);
+
 
   const fetchUnverifiedProducts = async () => {
     try {

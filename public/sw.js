@@ -1,15 +1,22 @@
 // public/sw.js
-self.addEventListener('install', (event) => {
-  console.log('Service Worker installing.');
-  event.waitUntil(self.skipWaiting());
-});
+const CACHE_NAME = 'meal-pass-v1';
+const ASSETS = [
+  '/',
+  '/site.webmanifest',
+  '/icon-192.png',
+  '/icon-512.png'
+];
 
-self.addEventListener('activate', (event) => {
-  console.log('Service Worker activating.');
-  event.waitUntil(self.clients.claim());
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+  );
 });
 
 self.addEventListener('fetch', (event) => {
-  // ここにオフライン用のキャッシュ処理などを書けますが、
-  // まずはPWA認識させるために空のフェッチリスナーを置きます。
+  event.respondWith(
+    caches.match(event.request).then((response) => {
+      return response || fetch(event.request);
+    })
+  );
 });
