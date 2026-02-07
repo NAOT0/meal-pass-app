@@ -45,6 +45,8 @@ export default function RootLayout() {
             <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="game_modal" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="cart" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="scanner" options={{ presentation: 'modal' }} />
             </Stack>
         </View>
         </View>

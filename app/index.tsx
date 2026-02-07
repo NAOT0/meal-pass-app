@@ -1,35 +1,36 @@
-import { View, Text, TextInput, ScrollView, SafeAreaView, Platform, LayoutAnimation, UIManager } from 'react-native';
+import { View, Text, TextInput, ScrollView, SafeAreaView, Platform, LayoutAnimation, UIManager, TouchableOpacity } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { signInAnonymously } from '../src/lib/auth';
 import { Button } from '../src/components/Button';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
 import { fillBudget, CATEGORY_IDS } from '../src/features/recommendation/logic';
 import { Database } from '../src/types/schema';
-import { BarcodeScanner } from '../src/components/BarcodeScanner';
-import { ScanBarcode, Plus, Trash2 } from 'lucide-react-native';
+import { ScanBarcode, Plus, Trash2, ShoppingCart } from 'lucide-react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 
 // ... (Product type def)
 type Product = Database['public']['Tables']['products']['Row'];
 
+import { useCartStore } from '../src/store/useCartStore';
+
 export default function HomeScreen() {
+  const router = useRouter();
   const [budget, setBudget] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   
-  /* State for Dynamic List */
-  const [currentList, setCurrentList] = useState<Product[]>([]);
-  const [lockedIds, setLockedIds] = useState<Set<string>>(new Set());
+  /* Global State from Store */
+  const { 
+    currentList, lockedIds, quantities, 
+    setCurrentList, toggleItemLock, updateQuantity, deleteItem, addFromScan 
+  } = useCartStore();
   
   // Total Price: ALL Items (Plan Total) - Includes suggestions
   const [totalPrice, setTotalPrice] = useState(0);
 
   // Locked Total: ONLY Selected Items (For Scanner/Cart)
   const [lockedTotal, setLockedTotal] = useState(0);
-
-  // Quantity Map: { productId: count }
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
 
   // ... Filter State ...
   const [filters, setFilters] = useState<Record<number, boolean>>({
@@ -65,6 +66,10 @@ export default function HomeScreen() {
     fetchProducts();
   }, []);
 
+  useEffect(() => {
+    useCartStore.getState().setFilters(filters);
+  }, [filters]);
+
   // Update totals
   useEffect(() => {
     let allSum = 0;
@@ -98,55 +103,29 @@ export default function HomeScreen() {
       .eq('is_active', true)
       .or(`expires_at.is.null,expires_at.gt.${now}`);
     
-    if (data) {
+     if (data) {
       setProducts(data as any);
+      useCartStore.getState().setProducts(data as any);
     }
   };
 
   const handleScan = (product: Product) => {
-    // 1. Add to currentList if not present
-    setCurrentList(prev => {
-      if (prev.find(p => p.id === product.id)) return prev;
-      return [product, ...prev];
-    });
-
-    // 2. Increment Quantity (default to 1 if new)
-    setQuantities(prev => {
-        const current = prev[product.id] || 0;
-        return { ...prev, [product.id]: current + 1 };
-    });
-
-    // 3. Mark as Locked (Selected)
-    setLockedIds(prev => {
-        const next = new Set(prev);
-        next.add(product.id);
-        return next;
-    });
+    addFromScan(product);
   };
 
   const handleRecommend = (isRefill = false) => {
     const budgetNum = parseInt(budget, 10);
     if (isNaN(budgetNum) || budgetNum <= 0) return;
 
+    // Sync to store for scanner/cart
+    useCartStore.getState().setBudget(budgetNum);
+    useCartStore.getState().setFilters(filters);
+    useCartStore.getState().setProducts(products);
+
     setLoading(true);
     setTimeout(() => {
-      // Logic Change: "Reset" now behaves like "Recalculate"
-      // We always keep manually locked items and valid quantities.
-      // If isRefill is true (Gacha), we might want to discard unlocked items that are currently in the list.
-      // logic.ts `fillBudget` handles `currentList` as "items to keep if locked".
-      // But we actally want to keep *everything* that is locked, and fill the rest.
-      
       const locksToUse = lockedIds; 
-      // quantities are preserved.
-
-      // Calculate current spent by locked items (or all items in current list if we want to keep them?)
-      // The requirement says: "keep items that user already selected (isSelected: true or quantity changed)"
-      // `lockedIds` tracks selection.
-      // Quantity change: we simply keep everything in the current list that has quantity >= 1?
-      // Actually, if we re-run logic, we want to replace *unlocked* items.
-      // So effectively, we just call fillBudget with current list and locks.
       
-      // Calculate effective budget
       const currentLockedItems = currentList.filter(p => locksToUse.has(p.id));
       
       let extraQuantityCost = 0;
@@ -180,103 +159,11 @@ export default function HomeScreen() {
 
       setLoading(false);
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setCurrentList(list);
-      setQuantities(newQuantities);
+      // Update store
+      useCartStore.setState({ currentList: list, quantities: newQuantities });
     }, 300);
   };
   
-  const toggleItemLock = (productId: string) => {
-    const newLocked = new Set(lockedIds);
-    if (newLocked.has(productId)) {
-      newLocked.delete(productId);
-    } else {
-      newLocked.add(productId);
-    }
-    setLockedIds(newLocked);
-  };
-
-  const updateQuantity = (productId: string, delta: number) => {
-    // Update quantity logic fixed
-    setQuantities(prev => {
-      const current = prev[productId] || 1;
-      const next = current + delta;
-      if (next < 1) return prev; 
-      return { ...prev, [productId]: next };
-    });
-  };
-
-  const deleteItem = (productId: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-
-    const isLocked = lockedIds.has(productId);
-    
-    // 1. Remove from lockedIds (if selected)
-    if (isLocked) {
-        setLockedIds(prev => {
-            const next = new Set(prev);
-            next.delete(productId);
-            return next;
-        });
-    }
-
-    // 2. Remove from lists (Common Logic)
-    let nextList = currentList.filter(p => p.id !== productId);
-    
-    // Clean up quantity
-    setQuantities(prev => {
-        const next = { ...prev };
-        delete next[productId];
-        return next;
-    });
-
-    // 3. Auto Refill Logic (Aggressive Loop)
-    // Calculate initial Gap
-    let currentTotal = 0;
-    nextList.forEach(item => {
-        const qty = quantities[item.id] || 1;
-        currentTotal += item.price * qty;
-    });
-    
-    const budgetNum = parseInt(budget, 10) || 0;
-    let gap = budgetNum - currentTotal;
-
-    // Refill Loop
-    // Safety break to prevent infinite loops
-    let attempts = 0;
-    while (gap > 0 && attempts < 10) {
-        attempts++;
-        
-        // Find candidates
-        const candidatePool = products.filter(p => 
-            !nextList.find(existing => existing.id === p.id) && 
-            p.id !== productId && 
-            p.price <= gap &&
-            p.price > 0 // Ensure positive price
-        );
-
-        // Filter by user preference if possible
-        const preferredPool = candidatePool.filter(p => p.category_id && filters[p.category_id]);
-        const finalPool = preferredPool.length > 0 ? preferredPool : candidatePool;
-
-        if (finalPool.length > 0) {
-            const randomItem = finalPool[Math.floor(Math.random() * finalPool.length)];
-            
-            // Add as candidate (isSelected: false by default)
-            nextList = [...nextList, randomItem];
-            
-            // Initialize quantity
-            setQuantities(prev => ({ ...prev, [randomItem.id]: 1 }));
-            
-            // Decrease Gap
-            gap -= randomItem.price;
-        } else {
-            // No more items fit
-            break; 
-        }
-    }
-
-    setCurrentList(nextList);
-  };
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50 h-full">
@@ -287,11 +174,11 @@ export default function HomeScreen() {
             <Text className="text-2xl font-bold text-gray-900">ミールパス計算アプリ</Text>
             <Text className="text-sm text-gray-500">ver1.0.0</Text>
           </View>
-          {/* Scan Button (Enhanced) */}
+          {/* Scan Button Only */}
           <View> 
              <Button 
                 title="" 
-                onPress={() => setIsScannerVisible(true)}
+                onPress={() => router.push('/scanner')}
                 className="w-14 h-14 rounded-2xl bg-gray-900 items-center justify-center shadow-md border-2 border-white"
                 icon={<ScanBarcode color="white" size={24} />}
              />
@@ -358,7 +245,7 @@ export default function HomeScreen() {
              </View>
              
              <View className="items-end">
-                 <Text className="text-xs text-gray-400 font-bold mb-1">プラン総額 (予定)</Text>
+                 <Text className="text-xs text-gray-400 font-bold mb-1">おすすめ合計</Text>
                  <Text className={`text-xl font-bold ${totalPrice === (parseInt(budget, 10) || 0) ? 'text-green-600' : 'text-blue-600'}`}>
                     ¥{totalPrice}
                  </Text>
@@ -379,9 +266,9 @@ export default function HomeScreen() {
             <View className="pb-20">
               {/* Section A: Selected Items */}
                <View className="mb-8">
-                  <Text className="text-lg font-bold text-gray-800 mb-3 px-1">🛒 買うものリスト</Text>
-                  <View className="gap-3">
-                    {currentList.filter(item => lockedIds.has(item.id)).map(item => {
+                  <Text className="text-lg font-bold text-gray-800 mb-6 px-1">🛒 買うものリスト</Text>
+                  <View>
+                      {currentList.filter(item => lockedIds.has(item.id)).map(item => {
                         const qty = quantities[item.id] || 1;
                         
                         const renderRightActions = () => (
@@ -391,49 +278,40 @@ export default function HomeScreen() {
                         );
 
                         return (
-                          <Swipeable
-                            key={item.id}
-                            renderRightActions={renderRightActions}
-                            onSwipeableOpen={() => deleteItem(item.id)}
-                            overshootRight={false}
-                            friction={2}
-                            rightThreshold={40}
-                          >
-                            <View 
-                              className="flex-row items-center p-4 rounded-xl border bg-white border-blue-200 shadow-sm"
+                          <View key={item.id} className="mb-6">
+                            <Swipeable
+                              renderRightActions={renderRightActions}
+                              onSwipeableOpen={() => deleteItem(item.id)}
+                              overshootRight={false}
+                              friction={2}
+                              rightThreshold={40}
                             >
-                               <View className="flex-1">
-                                 <Text className="font-bold text-lg text-blue-900">{item.name}</Text>
-                                 <View className="flex-row items-end gap-2">
-                                     <Text className="text-gray-500">¥{item.price}</Text>
-                                     {item.is_temporary && <Text className="text-xs text-purple-500 font-bold bg-purple-100 px-1 rounded">限定</Text>}
-                                 </View>
+                              <View 
+                                 className="flex-row items-center p-4 rounded-xl border bg-white border-blue-100 shadow-sm h-24 w-[92%] self-center"
+                               >
+                                  <View className="flex-1">
+                                    <Text className="font-bold text-lg text-blue-900" numberOfLines={1}>{item.name}</Text>
+                                    <View className="flex-row items-end gap-2">
+                                        <Text className="text-gray-500 font-bold">¥{item.price}</Text>
+                                        {item.is_temporary && <Text className="text-xs text-purple-600 font-bold">限定</Text>}
+                                    </View>
+                                  </View>
+                                  
+                                  <View className="items-end justify-center">
+                                      <View className="flex-row items-center bg-gray-100 rounded-lg p-1">
+                                          <Button title="-" variant="ghost" onPress={() => updateQuantity(item.id, -1)} className="w-8 h-8 p-0" textClassName="text-lg text-gray-600" />
+                                          <Text className="font-bold text-gray-800 w-8 text-center">{qty}</Text>
+                                          <Button title="+" variant="ghost" onPress={() => updateQuantity(item.id, 1)} className="w-8 h-8 p-0" textClassName="text-lg text-gray-600" />
+                                      </View>
+                                  </View>
                                </View>
-                               
-                               <View className="items-end gap-2">
-                                   <View className="flex-row items-center gap-2">
-                                       <View className="flex-row items-center bg-gray-100 rounded-lg">
-                                           <Button title="-" variant="ghost" onPress={() => updateQuantity(item.id, -1)} className="w-8 h-8 p-0" textClassName="text-lg text-gray-600" />
-                                           <Text className="font-bold text-gray-800 w-6 text-center">{qty}</Text>
-                                           <Button title="+" variant="ghost" onPress={() => updateQuantity(item.id, 1)} className="w-8 h-8 p-0" textClassName="text-lg text-gray-600" />
-                                       </View>
-                                       {/* Delete Button Removed (Swipe to delete) */}
-                                   </View>
-                                   <Button
-                                     title="確定済み"
-                                     variant="primary"
-                                     disabled={true} // Disable toggle on tap
-                                     className="bg-blue-600 px-3 py-1 min-w-[60px] opacity-100" // Keep opacity high to look active
-                                     textClassName="text-xs"
-                                   />
-                               </View>
-                            </View>
-                          </Swipeable>
+                            </Swipeable>
+                          </View>
                         );
                     })}
                     {currentList.filter(item => lockedIds.has(item.id)).length === 0 && (
                         <View className="p-6 border-2 border-dashed border-gray-200 rounded-xl items-center">
-                            <Text className="text-gray-400">カートは空です</Text>
+                            <Text className="text-gray-400">リストは空です</Text>
                         </View>
                     )}
                   </View>
@@ -441,8 +319,8 @@ export default function HomeScreen() {
 
               {/* Section B: Suggested Items */}
               <View>
-                  <Text className="text-lg font-bold text-gray-500 mb-3 px-1">💡 候補・おすすめ</Text>
-                  <View className="gap-3">
+                  <Text className="text-lg font-bold text-gray-500 mb-4 px-1">💡 候補・おすすめ</Text>
+                  <View>
                     {currentList.filter(item => !lockedIds.has(item.id)).map(item => {
                         const renderRightActions = () => (
                            <View className="bg-red-500 justify-center items-center w-20 rounded-r-xl ml-[-20] pl-4">
@@ -451,38 +329,42 @@ export default function HomeScreen() {
                         );
 
                         return (
-                          <Swipeable
-                             key={item.id}
-                             renderRightActions={renderRightActions}
-                             onSwipeableOpen={() => deleteItem(item.id)}
-                             overshootRight={false}
-                             friction={2}
-                             rightThreshold={40}
-                          >
-                            <View 
-                              className="flex-row items-center p-4 rounded-xl border-2 border-dashed border-gray-300 bg-white/60 opacity-90"
+                          <View key={item.id} className="mb-6">
+                            <Swipeable
+                               renderRightActions={renderRightActions}
+                               onSwipeableOpen={() => deleteItem(item.id)}
+                               overshootRight={false}
+                               friction={2}
+                               rightThreshold={40}
                             >
-                               <View className="flex-1 opacity-70">
-                                 <Text className="font-bold text-lg text-gray-600">{item.name}</Text>
-                                 <View className="flex-row items-end gap-2">
-                                     <Text className="text-gray-600">¥{item.price}</Text>
-                                     {item.is_recommended && <Text className="text-xs text-orange-400 border border-orange-200 px-1 rounded">おすすめ</Text>}
-                                 </View>
+                                <View 
+                                  className="flex-row items-center p-4 rounded-xl border border-gray-200 bg-gray-50/50 shadow-sm h-24 w-[92%] self-center"
+                                >
+                                  <View className="flex-1">
+                                    <Text className="font-bold text-lg text-gray-700" numberOfLines={1}>{item.name}</Text>
+                                    <View className="flex-row items-end gap-2">
+                                        <Text className="text-gray-500 font-bold">¥{item.price}</Text>
+                                        {item.is_recommended && (
+                                          <View className="bg-amber-100 px-1.5 py-0.5 rounded">
+                                            <Text className="text-[10px] text-amber-700 font-bold">おすすめ</Text>
+                                          </View>
+                                        )}
+                                    </View>
+                                  </View>
+                                  
+                                  <View className="items-end gap-2">
+                                      <Button
+                                        title="追加"
+                                        variant="outline"
+                                        onPress={() => toggleItemLock(item.id)}
+                                        className="border-gray-300 bg-white px-6 h-11"
+                                        textClassName="text-gray-700 font-bold"
+                                        icon={<Plus size={18} color="#374151" />}
+                                      />
+                                  </View>
                                </View>
-                               
-                               <View className="items-end gap-2">
-                                   <Button
-                                     title="追加"
-                                     variant="outline"
-                                     onPress={() => toggleItemLock(item.id)} // Lock it -> moves to Section A
-                                     className="border-gray-400 px-6 py-2"
-                                     textClassName="text-gray-600 font-bold"
-                                     icon={<Plus size={18} color="#4B5563" />}
-                                   />
-                                   {/* Delete Button Removed (Swipe to delete/refill) */}
-                               </View>
-                            </View>
-                          </Swipeable>
+                            </Swipeable>
+                          </View>
                         );
                     })}
                     {currentList.filter(item => !lockedIds.has(item.id)).length === 0 && (
@@ -518,22 +400,7 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      {/* Barcode Scanner Modal */}
-      <BarcodeScanner 
-        visible={isScannerVisible}
-        onClose={() => setIsScannerVisible(false)}
-        onScan={handleScan}
-        totalBudget={parseInt(budget, 10) || 0}
-        currentTotal={lockedTotal} // Use locked total for scanner/cart
-        cartItems={currentList.filter(item => lockedIds.has(item.id))} // Only pass selected items as "Cart"
-        candidates={currentList.filter(item => !lockedIds.has(item.id))} // Pass candidates!
-        quantities={quantities}
-        allProducts={products}
-        onUpdateQuantity={updateQuantity}
-        onToggleLock={toggleItemLock}
-        lockedIds={lockedIds}
-        onDeleteItem={deleteItem}
-      />
+      {/* Barcode Scanner Modal Removed - Now uses route /scanner */}
     </SafeAreaView>
   );
 }

@@ -7,7 +7,7 @@ import { Flashlight, FlashlightOff, X, CheckCircle2, ShoppingCart } from 'lucide
 import { supabase } from '../lib/supabase';
 import { Database } from '../types/schema';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CartDrawer } from './CartDrawer';
+import { useRouter } from 'expo-router';
 
 type Product = Database['public']['Tables']['products']['Row'];
 
@@ -50,7 +50,7 @@ export const BarcodeScanner = ({
   const [torchOn, setTorchOn] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [showCart, setShowCart] = useState(false);
+  const router = useRouter();
   
   const insets = useSafeAreaInsets();
   
@@ -241,7 +241,12 @@ export const BarcodeScanner = ({
             {/* Cart FAB */}
             <TouchableOpacity 
                 activeOpacity={0.8}
-                onPress={() => setShowCart(true)}
+                onPress={() => {
+                    onClose(); // まずスキャナーを閉じてから
+                    setTimeout(() => {
+                        router.push('/cart'); // 買い物かごを開く
+                    }, 100); // 閉じきる時間をわずかに待つとより安定します
+                }}
                 className="absolute right-6 bg-emerald-500 w-16 h-16 rounded-full items-center justify-center shadow-lg shadow-black/50 overflow-visible"
                 style={{ bottom: insets.bottom + 40 }}
             >
@@ -277,26 +282,6 @@ export const BarcodeScanner = ({
                 </View>
             )}
 
-            <CartDrawer 
-                visible={showCart}
-                onClose={() => setShowCart(false)}
-                cartItems={cartItems}
-                candidates={candidates}
-                quantities={quantities}
-                onUpdateQuantity={onUpdateQuantity}
-                onToggleLock={onToggleLock}
-                lockedIds={lockedIds}
-                onDeleteItem={onDeleteItem}
-                allProducts={allProducts}
-                currentTotal={currentTotal}
-                totalBudget={totalBudget}
-                onAddRecommended={(product) => {
-                    // Reuse onScan to add item
-                    onScan(product);
-                    showToast(product.name);
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                }}
-            />
         </View>
     </Modal>
   );
