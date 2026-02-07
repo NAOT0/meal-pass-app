@@ -1,7 +1,7 @@
+// app/+html.tsx
 import { ScrollViewStyleReset } from 'expo-router/html';
 import { type PropsWithChildren } from 'react';
 
-// このファイルはWeb版の「index.html」の役割をします
 export default function Root({ children }: PropsWithChildren) {
   return (
     <html lang="ja">
@@ -10,8 +10,10 @@ export default function Root({ children }: PropsWithChildren) {
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
         
-        {/* ▼▼▼ これが超重要！マニフェストを読み込むタグ ▼▼▼ */}
+        {/* ▼▼▼ PWA設定：マニフェストだけでなく、アイコンも直接指定する ▼▼▼ */}
         <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <meta name="theme-color" content="#ffffff" />
         {/* ▲▲▲▲▲▲ */}
 
         <ScrollViewStyleReset />
