@@ -54,22 +54,23 @@ export default function ScannerScreen() {
          return;
       }
 
-      const { data: product, error: productError } = await supabase
+      const { data: productData, error: productError } = await supabase
         .from('products')
         .select('*')
         .eq('id', (barcodeData as any).product_id)
-        .returns<Product>()
         .single();
       
-      if (productError || !product) {
+      if (productError || !productData) {
         setTimeout(() => { lockScanRef.current = false; }, 1000);
         return;
       }
 
+      const product = productData as Product;
+
       // Success
       setScanned(true);
       lastScannedCodeRef.current = data;
-      addFromScan(product as Product);
+      addFromScan(product);
       
       showToast(product.name);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
