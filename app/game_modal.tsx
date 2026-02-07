@@ -4,7 +4,7 @@ import { supabase } from '../src/lib/supabase';
 import { Database } from '../src/types/schema';
 import { Button } from '../src/components/Button';
 import { useRouter } from 'expo-router';
-
+import { Platform } from 'react-native';
 type Product = Database['public']['Tables']['products']['Row'];
 
 // UI definition for categories (ID -> Label, Color)
@@ -27,6 +27,21 @@ export default function GameModal() {
 
   useEffect(() => {
     fetchUnverifiedProducts();
+  }, []);
+  useEffect(() => {
+    // Web版かつ、ServiceWorkerが使える環境なら登録する
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(
+          (registration) => {
+            console.log('SW registered: ', registration);
+          },
+          (err) => {
+            console.log('SW registration failed: ', err);
+          }
+        );
+      });
+    }
   }, []);
 
   const fetchUnverifiedProducts = async () => {
