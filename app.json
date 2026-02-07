@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "meal-pass-app",
+    "name": "ミールパス計算アプリ",
     "slug": "meal-pass-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon.png", 
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -20,12 +20,41 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "edgeToEdgeEnabled": true
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "output": "single"
+      "output": "single",
+      "bundler": "metro",
+      "shortName": "ミールパス", 
+      "backgroundColor": "#ffffff",
+      "themeColor": "#ffffff",
+      "display": "standalone", 
+      "startUrl": "/",
+      "meta": {
+        "apple": {
+          "mobileWebAppCapable": "yes"
+        }
+      },
+      "manifest": {
+        "lang": "ja",
+        "name": "ミールパス計算アプリ",
+        "short_name": "ミールパス",
+        "display": "standalone",
+        "background_color": "#ffffff",
+        "icons": [
+          {
+            "src": "./assets/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+          },
+          {
+            "src": "./assets/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+          }
+        ]
+      }
     },
     "plugins": [
       "expo-router",
