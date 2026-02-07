@@ -16,7 +16,7 @@
   ],
   "rewrites": [
     {
-      "source": "/(?!_expo|static|assets|sw\\.js|site\\.webmanifest|.*\\.[a-zA-Z0-9]+$).*",
+      "source": "/((?!_expo|static|assets|sw\\.js|site\\.webmanifest|.*\\.[a-zA-Z0-9]+$).*)",
       "destination": "/index.html"
     }
   ]
