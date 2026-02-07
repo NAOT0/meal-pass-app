@@ -15,6 +15,15 @@ export default function Root({ children }: PropsWithChildren) {
         <link rel="icon" href="/icon-512.png" />
         <link rel="apple-touch-icon" href="/icon-512.png" />
         <meta name="theme-color" content="#ffffff" />
+        
+        {/* SEO / SNSシェア設定 (OGP) */}
+        <meta name="description" content="大学生協のミールパスを賢く使い切るための計算・管理アプリです。" />
+        <meta property="og:title" content="ミールパス計算アプリ" />
+        <meta property="og:description" content="大学生協のミールパスを賢く使い切るための計算・管理アプリです。" />
+        <meta property="og:image" content="https://meal-pass-app.vercel.app/icon-512.png" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://meal-pass-app.vercel.app/" />
+        <meta name="twitter:card" content="summary_large_image" />
         {/* ▲▲▲▲▲▲ */}
 
         <ScrollViewStyleReset />
