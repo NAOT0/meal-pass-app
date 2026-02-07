@@ -12,7 +12,7 @@ export default function Root({ children }: PropsWithChildren) {
         
         {/* ▼▼▼ PWA設定：マニフェストだけでなく、アイコンも直接指定する ▼▼▼ */}
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="apple-touch-icon" href="/icon-512.png" />
         <meta name="theme-color" content="#ffffff" />
         {/* ▲▲▲▲▲▲ */}
 
