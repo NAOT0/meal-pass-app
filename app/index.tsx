@@ -284,8 +284,8 @@ export default function HomeScreen() {
         {/* Header */}
         <View className="mb-6 flex-row justify-between items-start">
           <View>
-            <Text className="text-2xl font-bold text-gray-900">ミールパス最適化</Text>
-            <Text className="text-sm text-gray-500">残高に合わせて賢く選ぼう</Text>
+            <Text className="text-2xl font-bold text-gray-900">ミールパス計算アプリ</Text>
+            <Text className="text-sm text-gray-500">ver1.0.0</Text>
           </View>
           {/* Scan Button (Enhanced) */}
           <View> 
@@ -300,7 +300,7 @@ export default function HomeScreen() {
 
         {/* Filter Chips (Horizontal Scroll) */}
         <View className="mb-6">
-          <Text className="text-sm font-bold text-gray-400 mb-2">カテゴリーフィルター</Text>
+          <Text className="text-sm font-bold text-gray-400 mb-2">カテゴリ選択</Text>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
