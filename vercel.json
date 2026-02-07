@@ -1,5 +1,23 @@
 {
+  "cleanUrls": true,
+  "headers": [
+    {
+      "source": "/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    }
+  ],
   "rewrites": [
-    { "source": "/((?!static|assets|_expo|sw\\.js|site\\.webmanifest|.*\\.).*)", "destination": "/index.html" }
+    {
+      "source": "/(?!_expo|static|assets|sw\\.js|site\\.webmanifest|.*\\.[a-zA-Z0-9]+$).*",
+      "destination": "/index.html"
+    }
   ]
 }

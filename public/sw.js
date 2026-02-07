@@ -1,22 +1,31 @@
 // public/sw.js
 const CACHE_NAME = 'meal-pass-v1';
-const ASSETS = [
-  '/',
-  '/site.webmanifest',
-  '/icon-192.png',
-  '/icon-512.png'
-];
 
 self.addEventListener('install', (event) => {
+  // 新しいSWがインストールされたら待機せずに即座にアクティブにする
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  // 古いキャッシュをクリア
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (event) => {
+  // 404エラーを防ぐため、ネットワーク優先で取得する
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
+    fetch(event.request).catch(() => {
+      return caches.match(event.request);
     })
   );
 });

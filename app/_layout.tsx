@@ -12,31 +12,29 @@ export default function RootLayout() {
 
     // 1. Service Worker の登録
     if ('serviceWorker' in navigator) {
-      const registerSW = () => {
+      window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch(err => {
-          console.error('SW registration failed: ', err);
+          console.log('SW registration ignored: ', err);
         });
-      };
-      if (document.readyState === 'complete') registerSW();
-      else window.addEventListener('load', registerSW);
+      });
     }
 
-    // 2. マニフェストとアイコンの動的注入
-    const addLink = (rel: string, href: string) => {
-      try {
+    // 2. マニフェストとアイコンの動적注入 (レンダリングをブロックしないよう少し遅らせる)
+    const timer = setTimeout(() => {
+      const addLink = (rel: string, href: string) => {
         if (!document.querySelector(`link[href="${href}"]`)) {
           const link = document.createElement('link');
           link.rel = rel;
           link.href = href;
           document.head.appendChild(link);
         }
-      } catch (e) {
-        console.warn('Failed to add PWA link:', e);
-      }
-    };
-    addLink('manifest', '/site.webmanifest');
-    addLink('icon', '/icon-512.png');
-    addLink('apple-touch-icon', '/icon-512.png');
+      };
+      addLink('manifest', '/site.webmanifest');
+      addLink('icon', '/icon-512.png');
+      addLink('apple-touch-icon', '/icon-512.png');
+    }, 1000);
+
+    return () => clearTimeout(timer);
   }, []);
   // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
