@@ -2,30 +2,37 @@
 const CACHE_NAME = 'meal-pass-v1';
 
 self.addEventListener('install', (event) => {
-  // 新しいSWがインストールされたら待機せずに即座にアクティブにする
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  // 古いキャッシュをクリア
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => self.clients.claim())
-  );
+  event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener('fetch', (event) => {
-  // 404エラーを防ぐため、ネットワーク優先で取得する
+  const url = new URL(event.request.url);
+
+  // index.html や sw.js は常にネットワークから最新を取得する
+  if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/sw.js') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // それ以外のJSや画像はキャッシュがあればそれを返し、なければネットワークから取得
   event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
+    caches.match(event.request).then((response) => {
+      return response || fetch(event.request).then((fetchResponse) => {
+        // 静的ファイル（_expo/staticなど）ならキャッシュに保存
+        if (event.request.url.includes('_expo/static') || event.request.url.includes('assets')) {
+          const responseClone = fetchResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          });
+        }
+        return fetchResponse;
+      });
     })
   );
 });
