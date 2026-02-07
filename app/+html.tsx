@@ -27,6 +27,20 @@ export default function Root({ children }: PropsWithChildren) {
         {/* ▲▲▲▲▲▲ */}
 
         <ScrollViewStyleReset />
+        
+        {/* ▼▼▼ 自動復旧スクリプト：JS読み込み失敗時に自動リロードを実行し真っ白画面を防ぐ ▼▼▼ */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.addEventListener('error', function(e) {
+                if (e.target.tagName === 'SCRIPT') {
+                  console.log('Script load error detected, forcing reload...');
+                  window.location.reload();
+                }
+              }, true);
+            `,
+          }}
+        />
       </head>
       <body>{children}</body>
     </html>
