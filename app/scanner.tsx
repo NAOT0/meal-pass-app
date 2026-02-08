@@ -28,10 +28,12 @@ export default function ScannerScreen() {
   const lockScanRef = useRef(false);
 
   useEffect(() => {
-    if (!permission?.granted) {
+    if (permission?.status === 'denied') {
+      router.back();
+    } else if (permission?.status === 'undetermined' || (permission && !permission.granted)) {
       requestPermission();
     }
-  }, [permission, requestPermission]);
+  }, [permission]);
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
     if (scanned || lockScanRef.current) return;
@@ -91,20 +93,7 @@ export default function ScannerScreen() {
     setTimeout(() => { setToastMessage(null); }, 2500);
   };
 
-  if (!permission) return <View className="flex-1 bg-black" />;
-  if (!permission.granted) {
-    return (
-      <View className="flex-1 items-center justify-center bg-gray-900 p-6">
-        <Text className="text-white text-center mb-4 font-bold text-lg">カメラの使用許可が必要です</Text>
-        <TouchableOpacity onPress={requestPermission} className="bg-blue-600 px-8 py-4 rounded-full w-full">
-          <Text className="text-white font-bold text-center text-lg">許可する</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.back()} className="mt-6">
-          <Text className="text-blue-400 font-bold">戻る</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  if (!permission || !permission.granted) return <View className="flex-1 bg-black" />;
 
   const lockedTotal = currentList
     .filter(i => lockedIds.has(i.id))
@@ -123,12 +112,8 @@ export default function ScannerScreen() {
         
         {/* Header */}
         <View className="absolute top-0 left-0 right-0 bg-black/60 px-6 pb-4" style={{ paddingTop: insets.top + 10 }}>
-            <View className="flex-row justify-between items-center mb-4">
-                 <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-gray-800/80 rounded-full items-center justify-center">
-                    <X size={20} color="white" />
-                </TouchableOpacity>
+            <View className="flex-row justify-center items-center mb-4">
                  <Text className="text-white font-bold text-lg">スキャン</Text>
-                 <View className="w-10" />
             </View>
             <View className="items-center mt-4">
                 <View className="bg-black/60 px-6 py-2 rounded-full border border-white/20">
