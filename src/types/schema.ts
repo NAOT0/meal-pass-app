@@ -39,8 +39,8 @@ export interface Database {
           image_url: string | null
           is_active: boolean
           is_verified: boolean
-          is_recommended: boolean
-          is_temporary: boolean
+          is_recommended: boolean // Added
+          is_temporary: boolean // Added
           expires_at: string | null // Added
           created_at: string
         }
@@ -54,7 +54,7 @@ export interface Database {
           is_verified?: boolean
           is_recommended?: boolean
           is_temporary?: boolean
-          expires_at?: string | null // Added
+          expires_at?: string | null
           created_at?: string
         }
         Update: {
@@ -67,7 +67,7 @@ export interface Database {
           is_verified?: boolean
           is_recommended?: boolean
           is_temporary?: boolean
-          expires_at?: string | null // Added
+          expires_at?: string | null
           created_at?: string
         }
         Relationships: [

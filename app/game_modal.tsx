@@ -32,32 +32,55 @@ export default function GameModal() {
 
   const fetchUnverifiedProducts = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      setLoading(true);
+      console.log('[Game] Starting fetch...');
+      
+      // Attempt to get user, but don't crash if it fails (e.g. Anon sign-ins disabled)
+      let { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        setLoading(false);
-        return;
+        console.log('[Game] No user found, attempting anon sign in...');
+        const { data: authData, error: authErr } = await supabase.auth.signInAnonymously();
+        if (authErr) {
+          console.warn('[Game] Auth not available (ignoring):', authErr.message);
+        } else {
+          user = authData.user;
+        }
       }
 
+      const sessionId = user?.id || 'guest-session';
+      console.log('[Game] Using Identity:', sessionId);
+
       // 1. Get products already voted by this user
-      const { data: votedData } = await supabase
+      const { data: votedData, error: votedError } = await supabase
         .from('classification_votes')
         .select('product_id')
-        .eq('session_id', user.id) as { data: { product_id: string }[] | null, error: any };
+        .eq('session_id', sessionId);
+      
+      if (votedError) {
+        console.error('[Game] Voted Fetch Error:', votedError.message);
+      }
       
       const votedIds = votedData?.map(v => v.product_id) || [];
+      console.log('[Game] Voted Items Count:', votedIds.length);
 
-      // 2. Get total count of unverified products (excluding voted) to pick a random offset
+      // 2. Get total count of products (excluding voted) to pick a random offset
       let baseQuery = supabase
         .from('products')
         .select('*', { count: 'exact', head: true })
-        .eq('is_verified', false);
+        .eq('is_active', true);
 
-      if (votedIds.length > 0) {
+      if (votedIds.length > 0 && votedIds.length < 500) { // Limit huge IN clauses
         baseQuery = baseQuery.not('id', 'in', `(${votedIds.join(',')})`);
       }
 
-      const { count } = await baseQuery;
+      const { count, error: countError } = await baseQuery;
+      if (countError) {
+        console.error('[Game] Count Error:', countError.message);
+      }
+
       const totalAvailable = count || 0;
+      console.log('[Game] Total Available for Game:', totalAvailable);
+
       const randomOffset = totalAvailable > 10 
         ? Math.floor(Math.random() * (totalAvailable - 10)) 
         : 0;
@@ -66,18 +89,27 @@ export default function GameModal() {
       let query = supabase
         .from('products')
         .select('*')
-        .eq('is_verified', false);
+        .eq('is_active', true);
 
-      if (votedIds.length > 0) {
+      if (votedIds.length > 0 && votedIds.length < 500) {
         query = query.not('id', 'in', `(${votedIds.join(',')})`);
       }
 
-      const { data, error } = await query
+      const { data, error: fetchError } = await query
         .range(randomOffset, randomOffset + 10);
       
-      if (data) {
-        setProducts(data);
+      if (fetchError) {
+        console.error('[Game] Products Fetch Error:', fetchError.message);
       }
+
+      if (data) {
+        console.log('[Game] Displaying items:', data.length);
+        setProducts(data);
+      } else {
+        console.log('[Game] No data returned from fetch.');
+      }
+    } catch (err) {
+      console.error('[Game] Unexpected error:', err);
     } finally {
       setLoading(false);
     }
@@ -89,15 +121,15 @@ export default function GameModal() {
 
     // Async Insert
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-       supabase.from('classification_votes').insert({
-          product_id: product.id,
-          voted_category_id: categoryId, // Correct column name
-          session_id: user.id // Correct column name
-       } as any).then(({ error }) => {
-         if (error) console.error('Vote storage error:', error);
-       });
-    }
+    const sessionId = user?.id || 'guest-session';
+    
+    supabase.from('classification_votes').insert({
+      product_id: product.id,
+      voted_category_id: categoryId,
+      session_id: sessionId
+    } as any).then(({ error }) => {
+      if (error) console.error('Vote storage error:', error);
+    });
 
     setCurrentIndex(prev => prev + 1);
   };

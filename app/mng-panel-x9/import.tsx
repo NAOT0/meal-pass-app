@@ -1,30 +1,17 @@
-import { View, Text, TextInput, ScrollView, SafeAreaView, Alert, Switch, TouchableOpacity, FlatList } from 'react-native';
-import { useState } from 'react';
+import { View, Text, ScrollView, SafeAreaView, Alert, TouchableOpacity, FlatList, Platform } from 'react-native';
+import { useState, useRef } from 'react';
 import { useRouter } from 'expo-router';
-import { Button } from '../../src/components/Button';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { supabase } from '../../src/lib/supabase';
-import { ArrowLeft, Upload, FileText, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react-native';
-import { CATEGORY_IDS } from '../../src/features/recommendation/logic';
-
-// Helper to determine category from string (simple matching, default to 1)
-const getCategoryId = (catName: string): number | null => {
-    if (!catName) return null; // Return null if not specified
-    if (catName.includes('おにぎり')) return CATEGORY_IDS.ONIGIRI;
-    if (catName.includes('サラダ')) return CATEGORY_IDS.SALAD;
-    if (catName.includes('パスタ') || catName.includes('麺')) return CATEGORY_IDS.NOODLE;
-    if (catName.includes('飲み物') || catName.includes('ドリンク')) return CATEGORY_IDS.DRINK;
-    if (catName.includes('パン') || catName.includes('サンド')) return CATEGORY_IDS.BREAD;
-    if (catName.includes('デザート') || catName.includes('スイーツ')) return CATEGORY_IDS.DESSERT;
-    
-    // Default to Bento only if explicitly mentioned or fallback strategy is desired?
-    // For now, if provided string doesn't match known ones but exists, return null to force verification game?
-    // Or default to Bento? 
-    // User wants "items without specified category" to go to game.
-    // So if catName is empty -> null.
-    // If catName is random string -> null?
-    return CATEGORY_IDS.BENTO; // Keeping Bento as fallback for now if string exists but no match? Or maybe null?
-    // Let's change: if strictly empty -> null. If string exists, try to match, else Bento.
-};
+import { 
+    ArrowLeft, 
+    FileUp, 
+    CheckCircle, 
+    Trash2,
+    Database,
+    Zap
+} from 'lucide-react-native';
 
 type ImportItem = {
     janCode: string;
@@ -32,257 +19,268 @@ type ImportItem = {
     price: number;
     categoryId: number | null;
     isValid: boolean;
-    error?: string;
-    existingProductId?: string; // If found in DB
+};
+
+// Category mapping helper (Client side simple fallback)
+const getCategoryId = (catName: string): number => {
+    if (!catName) return 5; // UNKNOWN
+    if (catName.includes('おにぎり')) return 8; // ONIGIRI
+    if (catName.includes('サラダ')) return 6; // DELI
+    if (catName.includes('パスタ') || catName.includes('麺')) return 7; // NOODLE
+    if (catName.includes('飲み物') || catName.includes('ドリンク')) return 2; // DRINK
+    if (catName.includes('パン') || catName.includes('サンド')) return 3; // SNACK
+    if (catName.includes('デザート') || catName.includes('スイーツ')) return 4; // DESSERT
+    return 1; // BENTO default
 };
 
 export default function ImportScreen() {
     const router = useRouter();
-    const [inputText, setInputText] = useState('');
+    const [step, setStep] = useState<'upload' | 'preview' | 'importing'>('upload');
     const [previewData, setPreviewData] = useState<ImportItem[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [defaultExpiry, setDefaultExpiry] = useState(true); // Default 24h
-    const [step, setStep] = useState<'input' | 'preview'>('input');
+    const [importProgress, setImportProgress] = useState(0);
+    const [stats, setStats] = useState({ success: 0, error: 0 });
+    const [fileInfo, setFileInfo] = useState<{ name: string; size: string; count: number } | null>(null);
+    
+    const allParsedDataRef = useRef<ImportItem[]>([]);
 
-    const handleParse = async () => {
-        if (!inputText.trim()) {
-            Alert.alert('Error', 'Please enter some data');
-            return;
-        }
-
-        setIsProcessing(true);
-        const lines = inputText.split(/\n/);
-        const parsed: ImportItem[] = [];
-        
-        // 1. Parse Lines
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            
-            // Try CSV: JAN, Name, Price, Category
-            const parts = trimmed.split(/,|\t/).map(s => s.trim());
-            
-            let jan = parts[0];
-            let name = parts[1] || '未登録商品'; // Default name if simple list
-            let price = parseInt(parts[2] || '100', 10);
-            let catName = parts[3] || '';
-
-            // Validation
-            let isValid = true;
-            let error = '';
-
-            if (!jan || jan.length < 8) { // Basic length check
-                isValid = false;
-                error = 'Invalid JAN';
-            }
-            if (isNaN(price)) {
-                price = 0;
-                // Price 0 is suspicious but maybe allowed? Let's warn.
-                // But if it's just a JAN list, price is 0/100 default.
-            }
-
-            parsed.push({
-                janCode: jan,
-                name,
-                price,
-                categoryId: catName ? getCategoryId(catName) : null, // If no category string, null
-                isValid,
-                error
-            });
-        }
-
-        // 2. Check Existing JANs (Batch)
-        const jans = parsed.filter(i => i.isValid).map(i => i.janCode);
-        if (jans.length > 0) {
-            const { data: barcodes } = await supabase
-                .from('product_barcodes')
-                .select('jan_code, product_id')
-                .in('jan_code', jans);
-            
-            if (barcodes) {
-                const janMap = new Map((barcodes as any[]).map(b => [b.jan_code, b.product_id]));
-                parsed.forEach(p => {
-                    if (janMap.has(p.janCode)) {
-                        p.existingProductId = janMap.get(p.janCode);
-                    }
-                });
-            }
-        }
-
-        setPreviewData(parsed);
-        setStep('preview');
-        setIsProcessing(false);
+    const formatSize = (bytes: number) => {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     };
 
-    const handleImport = async () => {
-        setIsProcessing(true);
-        
-        const validItems = previewData.filter(i => i.isValid);
-        let successCount = 0;
-        let failCount = 0;
+    const handlePickFile = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: ['text/csv', 'text/plain'],
+                copyToCacheDirectory: true,
+            });
 
-        const expiresAt = defaultExpiry ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : null;
+            if (result.canceled) return;
+            setIsProcessing(true);
 
-        // Process sequentially to avoid strict rate limits or race conditions, 
-        // though parallel Promise.all is faster. Let's do batching or parallel chunks if needed.
-        // For simplicity: sequential.
-        
-        for (const item of validItems) {
-            try {
-                if (item.existingProductId) {
-                    // UPDATE
-                    // If CSV provided detailed info (name != default?), update it. 
-                    // Or always update `expires_at` (bringing it back to stock).
-                    // Let's assume we update everything fields + expiry.
-                    
-                    const updateQuery = (supabase.from('products') as any).update({
-                        name: item.name !== '未登録商品' ? item.name : undefined, // Only update name if provided? But we don't know old name here.
-                        // Ideally, if it's a simple JAN list, we might NOT want to overwrite Name/Price with defaults.
-                        // Heuristic: If name is '未登録商品', assume simple list -> Only update expiry.
-                        // If name is NOT '未登録商品', update all.
-                        ...(item.name !== '未登録商品' ? {
-                            name: item.name,
-                            price: item.price,
-                            category_id: item.categoryId,
-                        } : {}),
-                        expires_at: expiresAt,
-                        is_active: true // Reactivate it
-                    }); // Removed .eq() from here, moved to below
-                    
-                    const { error } = await updateQuery.eq('id', item.existingProductId);
-                    
-                    if (!error) successCount++;
-                    else failCount++;
-
-                } else {
-                    // INSERT
-                    const { data: pData, error: pError } = await (supabase.from('products') as any).insert({
-                        name: item.name,
-                        price: item.price,
-                        category_id: item.categoryId, // Can be null
-                        expires_at: expiresAt,
-                        is_recommended: false,
-                        is_active: true,
-                        is_verified: !!item.categoryId, // Verified only if category matches
-                        is_temporary: false,
-                    }) .select().single() as { data: any, error: any };
-
-                    if (pData && !pError) {
-                        const { error: bError } = await (supabase.from('product_barcodes') as any).insert({
-                            product_id: pData.id,
-                            jan_code: item.janCode
-                        });
-                        
-                        if (!bError) successCount++;
-                        else failCount++; // Created product but failed barcode... partial fail.
-                    } else {
-                        failCount++;
-                    }
-                }
-            } catch (e) {
-                failCount++;
+            const file = result.assets[0];
+            let content = '';
+            
+            if (Platform.OS === 'web') {
+                const response = await fetch(file.uri);
+                content = await response.text();
+            } else {
+                content = await FileSystem.readAsStringAsync(file.uri);
             }
+
+            const parsed = fastParse(content);
+            allParsedDataRef.current = parsed;
+            setFileInfo({
+                name: file.name,
+                size: formatSize(file.size || 0),
+                count: parsed.length
+            });
+            
+            setPreviewData(parsed.slice(0, 100)); // Show preview
+            setStep('preview');
+        } catch (error) {
+            Alert.alert('Error', '読み込みに失敗しました');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const fastParse = (text: string): ImportItem[] => {
+        const lines = text.split(/\n/).filter(l => l.trim().length > 0);
+        const results: ImportItem[] = [];
+        
+        for (const line of lines) {
+            const parts = line.split(/[,\t;]/).map(s => s.trim().replace(/^["']|["']$/g, ''));
+            if (parts.length < 2) continue;
+
+            const jan = parts[0].replace(/[^0-9]/g, '');
+            if (jan.length !== 8 && jan.length !== 13) continue;
+
+            results.push({
+                janCode: jan,
+                name: (parts[3] || '不明').replace(/^\*/, ''),
+                price: parseInt(parts[5] || '0', 10) || 0,
+                categoryId: parts[1] ? getCategoryId(parts[1]) : 1,
+                isValid: true
+            });
+        }
+        return results;
+    };
+
+    const handleResetDB = async () => {
+        if (Platform.OS === 'web') {
+            if (!window.confirm('WARNING: データベースを完全に初期化しますか？')) return;
+        } else {
+            // Native alert logic would go here
         }
 
-        setIsProcessing(false);
-        Alert.alert(
-            'Import Complete', 
-            `Success: ${successCount}\nFailed: ${failCount}`,
-            [{ text: 'OK', onPress: () => router.back() }]
-        );
+        setIsProcessing(true);
+        try {
+            await supabase.from('product_barcodes').delete().neq('jan_code', '0');
+            await supabase.from('products').delete().neq('name', 'VOID');
+            Alert.alert('Success', 'リセット完了');
+            setStep('upload');
+        } catch (e) {
+            Alert.alert('Error', '失敗しました');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleStartImport = async () => {
+        const items = allParsedDataRef.current;
+        if (items.length === 0) return;
+
+        setStep('importing');
+        setImportProgress(0);
+        let s = 0;
+        let e = 0;
+
+        const CHUNK_SIZE = 100;
+
+        for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+            const chunk = items.slice(i, i + CHUNK_SIZE);
+            try {
+                const { data, error } = await supabase.rpc('bulk_import_v3', { items: chunk, expires_at_val: null });
+                if (error) {
+                    console.error('Chunk Error:', error);
+                    e += chunk.length;
+                } else {
+                    const res = data as { success: number, error: number };
+                    s += res.success;
+                    e += res.error;
+                }
+            } catch (err) {
+                e += chunk.length;
+            }
+            // Update progress
+            setImportProgress(Math.round(((i + CHUNK_SIZE) / items.length) * 100));
+            setStats({ success: s, error: e });
+            
+            // Small delay to keep UI responsive
+            await new Promise(r => setTimeout(r, 10));
+        }
+
+        setTimeout(() => {
+            const msg = `完了しました\n成功: ${s}件\n失敗: ${e}件`;
+            if (Platform.OS === 'web') {
+                window.alert(msg);
+            } else {
+                Alert.alert('完了', msg);
+            }
+            router.back();
+        }, 500);
     };
 
     return (
-        <SafeAreaView className="flex-1 bg-gray-50">
-            <View className="p-4 bg-white border-b border-gray-200 flex-row items-center gap-4">
-                <TouchableOpacity onPress={() => router.back()} className="p-2">
-                    <ArrowLeft size={24} color="#374151" />
+        <SafeAreaView className="flex-1 bg-[#F8FAFC]">
+            {/* Header */}
+            <View className="p-6 bg-white border-b border-gray-100 flex-row items-center justify-between">
+                <View className="flex-row items-center">
+                    <TouchableOpacity onPress={() => router.back()} className="mr-4">
+                        <ArrowLeft size={24} color="#1E293B" />
+                    </TouchableOpacity>
+                    <Text className="text-xl font-black text-[#1E293B]">Backup Import</Text>
+                </View>
+                <TouchableOpacity onPress={handleResetDB} className="bg-red-50 p-2 rounded-xl">
+                    <Trash2 size={20} color="#EF4444" />
                 </TouchableOpacity>
-                <Text className="text-xl font-bold text-gray-900">一括インポート</Text>
             </View>
 
-            {step === 'input' ? (
-                <View className="flex-1 p-4">
-                    <Text className="font-bold text-gray-700 mb-2">CSV / テキストデータ</Text>
-                    <View className="bg-blue-50 p-4 rounded-lg mb-4 border border-blue-100">
-                        <Text className="text-xs text-blue-800 font-bold mb-1">フォーマット例 (コピー可)</Text>
-                        <Text className="text-xs text-blue-600 font-mono select-selectable">
-                            4901234567890, 鮭おにぎり, 150, おにぎり{'\n'}
-                            4909876543210, 緑茶 500ml, 120, 飲み物{'\n'}
-                            4500000000000 (JANのみも可)
+            {step === 'upload' && (
+                <View className="flex-1 p-8 justify-center">
+                    <TouchableOpacity 
+                        onPress={handlePickFile}
+                        activeOpacity={0.8}
+                        className="bg-white border-2 border-dashed border-blue-200 rounded-[40px] p-12 items-center aspect-square justify-center shadow-xl shadow-blue-100"
+                    >
+                        <View className="bg-blue-600 w-20 h-20 rounded-3xl items-center justify-center mb-6 shadow-lg shadow-blue-300">
+                            <FileUp size={40} color="white" />
+                        </View>
+                        <Text className="text-2xl font-bold text-[#1E293B] mb-2">Select CSV</Text>
+                        <Text className="text-gray-400 text-center text-sm px-6">
+                            Tap to browse files
                         </Text>
+                    </TouchableOpacity>
+                    
+                    <View className="mt-12 bg-green-50 p-6 rounded-3xl border border-green-100 flex-row items-start">
+                        <Database size={24} color="#059669" />
+                        <View className="ml-4 flex-1">
+                            <Text className="text-green-800 font-bold mb-1">Local Script Available</Text>
+                            <Text className="text-green-600 text-xs leading-5">
+                                大量のデータを扱う場合は、PCのターミナルから `npm run seed` を実行する方が高速で確実です。
+                            </Text>
+                        </View>
                     </View>
-                    
-                    <TextInput 
-                        className="flex-1 bg-white border border-gray-300 rounded-lg p-4 text-base font-mono"
-                        multiline
-                        textAlignVertical="top"
-                        placeholder="ここに貼り付け..."
-                        value={inputText}
-                        onChangeText={setInputText}
-                    />
-                    
-                    <View className="flex-row items-center justify-between py-4">
-                         <Text className="font-bold text-gray-700">デフォルト有効期限 (24時間)</Text>
-                         <Switch value={defaultExpiry} onValueChange={setDefaultExpiry} />
+                </View>
+            )}
+
+            {step === 'preview' && (
+                <View className="flex-1">
+                    <View className="bg-blue-600 p-8 rounded-b-[40px] shadow-lg">
+                        <View className="flex-row justify-between items-end">
+                            <View>
+                                <Text className="text-blue-100 text-xs font-bold tracking-widest uppercase mb-1">Preview</Text>
+                                <Text className="text-white text-3xl font-black">{fileInfo?.count.toLocaleString()}</Text>
+                                <Text className="text-blue-200 text-sm">Target items</Text>
+                            </View>
+                            <Zap size={40} color="white" opacity={0.2} />
+                        </View>
                     </View>
 
-                    <Button 
-                        title="プレビューを作成" 
-                        onPress={handleParse} 
-                        className="bg-blue-600"
-                        disabled={isProcessing}
-                    />
-                </View>
-            ) : (
-                <View className="flex-1 bg-white">
-                    <View className="p-4 bg-gray-50 border-b border-gray-200 flex-row justify-between items-center">
-                        <Text className="font-bold text-gray-600">
-                            {previewData.length} 件を検出 ({previewData.filter(i => i.isValid).length} 有効)
-                        </Text>
-                        <TouchableOpacity onPress={() => setStep('input')}>
-                            <Text className="text-blue-600 font-bold">修正する</Text>
-                        </TouchableOpacity>
-                    </View>
-                    
                     <FlatList 
                         data={previewData}
-                        keyExtractor={(item, index) => `${item.janCode}-${index}`}
-                        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+                        keyExtractor={(item, i) => `${item.janCode}-${i}`}
+                        className="px-6 pt-6"
                         renderItem={({ item }) => (
-                            <View className={`flex-row items-center p-3 mb-2 rounded border ${item.isValid ? (item.existingProductId ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200') : 'bg-red-50 border-red-200'}`}>
-                                <View className="mr-3">
-                                    {!item.isValid ? <AlertTriangle size={20} color="#EF4444" /> : 
-                                     item.existingProductId ? <RefreshCw size={20} color="#F59E0B" /> : 
-                                     <CheckCircle size={20} color="#10B981" />}
+                            <View className="bg-white p-4 rounded-2xl mb-3 flex-row items-center border border-gray-100 shadow-sm">
+                                <View className="bg-green-50 w-10 h-10 rounded-xl items-center justify-center mr-4">
+                                    <CheckCircle size={20} color="#10B981" />
                                 </View>
                                 <View className="flex-1">
-                                    <View className="flex-row items-center gap-2">
-                                        <Text className="font-bold text-gray-800">{item.janCode}</Text>
-                                        {item.isValid && (
-                                            <Text className="text-xs text-gray-500 bg-white px-1 border border-gray-200 rounded">
-                                                {item.existingProductId ? '更新' : '新規'}
-                                            </Text>
-                                        )}
-                                    </View>
-                                    <Text className="text-gray-600 text-xs mt-1">
-                                        {item.name} / ¥{item.price}
-                                    </Text>
-                                    {!item.isValid && (
-                                        <Text className="text-red-500 text-xs font-bold mt-1">{item.error}</Text>
-                                    )}
+                                    <Text className="text-gray-900 font-bold">{item.name}</Text>
+                                    <Text className="text-gray-400 text-xs">{item.janCode} • ¥{item.price}</Text>
                                 </View>
                             </View>
                         )}
+                        ListFooterComponent={<View className="h-40" />}
                     />
-                    
-                    <View className="p-4 border-t border-gray-200 absolute bottom-0 w-full bg-white pb-8">
-                         <Button 
-                            title={isProcessing ? "インポート中..." : "インポート実行"}
-                            onPress={handleImport}
-                            className="bg-green-600"
-                            disabled={isProcessing || previewData.filter(i => i.isValid).length === 0}
-                         />
+
+                    <View className="absolute bottom-10 left-6 right-6">
+                        <TouchableOpacity 
+                            onPress={handleStartImport}
+                            className="bg-blue-600 py-6 rounded-3xl shadow-xl shadow-blue-300 items-center"
+                        >
+                            <Text className="text-white font-black text-lg">EXECUTE IMPORT</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
+
+            {step === 'importing' && (
+                <View className="flex-1 p-10 justify-center items-center">
+                    <View className="w-full bg-white p-10 rounded-[50px] shadow-2xl items-center border border-gray-100">
+                        <View className="relative w-40 h-40 items-center justify-center mb-10">
+                            <Text className="text-5xl font-black text-blue-600">{importProgress}%</Text>
+                        </View>
+                        
+                        <Text className="text-2xl font-black text-[#1E293B] mb-2">Importing...</Text>
+                        <Text className="text-gray-400 text-center mb-12">
+                            Success: {stats.success.toLocaleString()}
+                            {'\n'}
+                            Errors: {stats.error.toLocaleString()}
+                        </Text>
+
+                        <View className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                            <View 
+                                className="h-full bg-blue-600 transition-all" 
+                                style={{ width: `${importProgress}%` }}
+                            />
+                        </View>
                     </View>
                 </View>
             )}

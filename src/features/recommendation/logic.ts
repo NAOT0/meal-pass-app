@@ -100,23 +100,45 @@ export const fillBudget = (
   });
 
   // 3. 優先順位付けとシャッフル
-  // Group 1: Recommended (True) -> Shuffle
-  // Group 2: Others (False) -> Shuffle
-  const recommended = candidates.filter(p => p.is_recommended).sort(() => 0.5 - Math.random());
-  const others = candidates.filter(p => !p.is_recommended).sort(() => 0.5 - Math.random());
+  // Group 1: Recommended (True) -> Fully Shuffled
+  const recommended = candidates
+    .filter(p => Boolean(p.is_recommended))
+    .sort(() => Math.random() - 0.5);
+  
+  // Group 2: Others (False) -> Fully Shuffled (Ignoring category priority for maximum variety per user request)
+  const others = candidates
+    .filter(p => !p.is_recommended)
+    .filter(p => {
+        const cid = p.category_id;
+        // Specifically exclude Bento and Noodle from regular auto-fill because they are "often sold out"
+        return cid !== CAT_BENTO && cid !== CAT_NOODLE;
+    })
+    .sort(() => Math.random() - 0.5);
 
-  // 結合: Recommendedが先
+  console.log('--- Logic Shuffle Debug ---');
+  console.log('Recommended Count:', recommended.length);
+  console.log('Others Count:', others.length);
+
+  // 結合: Recommendedが最優先、その後にランダムなその他
   const sortedCandidates = [...recommended, ...others];
 
   const newItems: Product[] = [];
 
   // 4. Greedy Selection with Constraints
   for (const product of sortedCandidates) {
+    if (product.is_recommended) {
+        console.log(`[Logic Trace] Checking Rec Item: ${product.name} (${product.price}yen, Cat:${product.category_id})`);
+    }
+
     // 予算チェック
-    if (product.price > remainingBudget) continue;
+    if (product.price > remainingBudget) {
+        if (product.is_recommended) console.log(`  -> Skip: Too expensive (Budget left: ${remainingBudget})`);
+        continue;
+    }
 
     // 制約チェック
     if (canAdd(product, counts)) {
+      if (product.is_recommended) console.log(`  -> ADDED: ${product.name}`);
       // 追加採用
       newItems.push(product);
       remainingBudget -= product.price;
@@ -126,6 +148,8 @@ export const fillBudget = (
       if (product.category_id) {
         counts[product.category_id] = (counts[product.category_id] || 0) + 1;
       }
+    } else if (product.is_recommended) {
+        console.log(`  -> Skip: Constraint full for category ${product.category_id}`);
     }
 
     if (remainingBudget < 50) break; // End if budget is tight

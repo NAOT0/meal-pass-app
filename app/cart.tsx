@@ -1,23 +1,21 @@
-
 import React from 'react';
-import { View, Text, ScrollView, SafeAreaView, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, ScrollView, SafeAreaView, TouchableOpacity, Platform, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
-import { X, ShoppingCart, Plus, Trash2 } from 'lucide-react-native';
+import { X, ShoppingCart, Plus, Minus, Trash2 } from 'lucide-react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useCartStore } from '../src/store/useCartStore';
-import { Button } from '../src/components/Button';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fillBudget } from '../src/features/recommendation/logic';
 
 export default function CartModal() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentList, lockedIds, quantities, budget, toggleItemLock, updateQuantity, deleteItem } = useCartStore();
+  const { 
+    currentList, lockedIds, quantities, budget, 
+    toggleItemLock, updateQuantity, deleteItem, 
+    products, filters 
+  } = useCartStore();
 
-  // We need budget and filters for delete logic. 
-  // For now, let's just implement the UI. 
-  // Ideally these would be in a store too, but let's keep it simple.
-  
   const currentTotal = currentList.filter(p => lockedIds.has(p.id)).reduce((sum, item) => {
     return sum + (item.price * (quantities[item.id] || 1));
   }, 0);
@@ -26,134 +24,143 @@ export default function CartModal() {
   const cartItems = currentList.filter(item => lockedIds.has(item.id));
   const recommendations = currentList.filter(item => !lockedIds.has(item.id));
 
+  // Check if there's anything left in the master list that fits the remaining budget and filters
+  const canSuggestMore = products.some(p => 
+    p.price <= remaining && 
+    p.is_active && 
+    !lockedIds.has(p.id) &&
+    (p.category_id ? filters[p.category_id] : true)
+  );
+
+  const hasVisibleSuggestions = recommendations.length > 0 || canSuggestMore;
+
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-warm-beige">
+      <StatusBar barStyle="dark-content" />
+      
       {/* Header */}
-      <View className="px-4 py-4 border-b border-gray-200 flex-row justify-between items-center bg-white shadow-sm">
-        <View className="flex-row items-center gap-2">
-            <ShoppingCart size={24} color="#111827" />
-            <Text className="font-bold text-xl text-gray-900">買い物かご ({cartItems.length})</Text>
+      <View className="pt-10 px-6 pb-4 flex-row justify-between items-center">
+        <View>
+          <Text className="text-xl font-bold text-[#2D332B]">買い物かご</Text>
+          <Text className="text-[10px] text-sage-green font-medium opacity-70">全 {cartItems.length} 点</Text>
         </View>
         <TouchableOpacity 
           onPress={() => router.back()} 
-          className="p-2 bg-gray-100 rounded-full"
+          className="p-2 bg-white border border-[#E8E6E0] rounded-full"
         >
           <X size={20} color="#6B7280" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView className="flex-1 px-4 pt-4" contentContainerStyle={{ paddingBottom: 100 }}>
-        {/* 1. Cart Items List */}
-        <View className="mb-10">
-          <View className="flex-row justify-between items-end mb-6 px-2">
-              <Text className="font-bold text-gray-500 text-sm">カート内の商品</Text>
-              <Text className="font-bold text-gray-900 text-lg">合計 ¥{currentTotal}</Text>
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 120 }}>
+        
+        {/* Shopping List */}
+        <View className="px-6 pt-6">
+          <View className="flex-row justify-between items-end mb-4">
+            <Text className="text-sm font-bold text-[#2D332B]">🛒 買うものリスト</Text>
+            <Text className="text-sm font-bold text-gray-400">合計 ¥{currentTotal}</Text>
           </View>
-          <View>
           
-          {cartItems.length === 0 ? (
-            <View className="py-12 items-center justify-center border-2 border-dashed border-gray-200 rounded-2xl bg-white">
-                <Text className="text-gray-400">カートは空です</Text>
-            </View>
-          ) : (
-            cartItems.map((item) => {
-              const qty = quantities[item.id] || 1;
-              const renderRightActions = () => (
-                <View className="bg-red-500 justify-center items-center w-20 rounded-r-xl ml-[-20] pl-4">
-                  <Trash2 size={24} color="white" />
-                </View>
-              );
+          <View className="space-y-3">
+            {cartItems.length === 0 ? (
+              <View className="border-2 border-dashed border-[#E8E6E0] rounded-2xl p-8 items-center justify-center bg-white/50">
+                <Text className="text-gray-400 text-sm">カートは空です</Text>
+              </View>
+            ) : (
+              cartItems.map((item) => {
+                const qty = quantities[item.id] || 1;
+                const renderRightActions = () => (
+                  <View className="bg-red-500 justify-center items-center w-20 rounded-r-2xl h-full">
+                    <Trash2 size={24} color="white" />
+                  </View>
+                );
 
-              return (
-                <View key={item.id} className="mb-6">
-                  <Swipeable
-                    renderRightActions={renderRightActions}
-                    onSwipeableOpen={() => deleteItem(item.id)}
-                    overshootRight={false}
-                  >
-                    <View className="flex-row items-center p-4 rounded-xl border bg-white border-blue-100 shadow-sm h-24 w-[92%] self-center">
-                      <View className="flex-1">
-                        <Text className="font-bold text-lg text-blue-900" numberOfLines={1}>{item.name}</Text>
-                        <Text className="text-gray-500 font-bold">¥{item.price}</Text>
-                      </View>
-                      <View className="items-end justify-center">
-                        <View className="flex-row items-center bg-gray-100 rounded-lg p-1">
-                          <Button title="-" variant="ghost" onPress={() => updateQuantity(item.id, -1)} className="w-8 h-8 p-0" />
-                          <Text className="font-bold text-gray-800 w-8 text-center">{qty}</Text>
-                          <Button title="+" variant="ghost" onPress={() => updateQuantity(item.id, 1)} className="w-8 h-8 p-0" />
+                return (
+                  <View key={item.id} className="mb-3">
+                    <Swipeable
+                      renderRightActions={renderRightActions}
+                      onSwipeableOpen={() => deleteItem(item.id)}
+                      overshootRight={false}
+                    >
+                      <View className="bg-white border-2 border-border-blue flex-row items-center justify-between p-4 rounded-2xl shadow-sm">
+                        <View className="flex-1">
+                          <Text className="font-bold text-[15px]" numberOfLines={1}>{item.name}</Text>
+                          <Text className="text-sm text-gray-500 font-medium">¥{item.price}</Text>
+                        </View>
+                        <View className="flex-row items-center gap-4">
+                          <View className="flex-row items-center bg-[#F4F7F9] rounded-xl px-2 py-1">
+                            <TouchableOpacity onPress={() => updateQuantity(item.id, -1)}>
+                              <Minus size={18} color="#9CA3AF" />
+                            </TouchableOpacity>
+                            <Text className="text-sm font-bold w-6 text-center">{qty}</Text>
+                            <TouchableOpacity onPress={() => updateQuantity(item.id, 1)}>
+                              <Plus size={18} color="#9CA3AF" />
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       </View>
-                    </View>
-                  </Swipeable>
-                </View>
-              );
-            })
-          )}
+                    </Swipeable>
+                  </View>
+                );
+              })
+            )}
           </View>
         </View>
 
-        {/* Recommendations */}
+        {/* Suggestions Section */}
         {recommendations.length > 0 && (
-            <View>
-                <View className="mb-6 px-2">
-                    <Text className="font-bold text-gray-500 text-sm">あと ¥{remaining} で買うならこれ！</Text>
-                </View>
-                <View>
-                    {recommendations.map((item) => {
-                      const renderRightActions = () => (
-                        <View className="bg-red-500 justify-center items-center w-20 rounded-r-xl ml-[-20] pl-4">
-                          <Trash2 size={24} color="white" />
+          <View className="px-6 pt-10">
+            <Text className="text-sm font-bold text-[#2D332B] mb-4">
+              💡 あと{remaining}円で買うならこれ！
+            </Text>
+            
+            <View className="space-y-3">
+              {recommendations.map((item) => {
+                const renderRightActions = () => (
+                  <View className="bg-red-500 justify-center items-center w-20 rounded-r-2xl h-full">
+                    <Trash2 size={24} color="white" />
+                  </View>
+                );
+
+                return (
+                  <View key={item.id} className="mb-3">
+                    <Swipeable
+                      renderRightActions={renderRightActions}
+                      onSwipeableOpen={() => deleteItem(item.id)}
+                      overshootRight={false}
+                    >
+                      <View className="bg-[#F2F2F2] flex-row items-center justify-between p-4 rounded-2xl">
+                        <View className="flex-1">
+                          <Text className="font-bold text-[15px]" numberOfLines={1}>{item.name}</Text>
+                          <Text className="text-sm text-gray-500 font-medium">¥{item.price}</Text>
                         </View>
-                      );
-                      
-                      return (
-                        <View key={item.id} className="mb-6">
-                          <Swipeable
-                            renderRightActions={renderRightActions}
-                            onSwipeableOpen={() => deleteItem(item.id)}
-                            overshootRight={false}
-                          >
-                            <View className="flex-row items-center p-4 rounded-xl border border-gray-200 bg-gray-50/50 shadow-sm h-24 w-[92%] self-center">
-                               <View className="flex-1">
-                                 <Text className="font-bold text-lg text-gray-700" numberOfLines={1}>
-                                   {item.name}
-                                 </Text>
-                                 <View className="flex-row items-end gap-2">
-                                     <Text className="text-gray-500 font-bold">¥{item.price}</Text>
-                                     <View className="bg-amber-100 px-1.5 py-0.5 rounded">
-                                       <Text className="text-[10px] text-amber-700 font-bold">おすすめ</Text>
-                                     </View>
-                                 </View>
-                               </View>
-                               
-                               <Button
-                                 title="追加"
-                                 variant="primary"
-                                 onPress={() => toggleItemLock(item.id)}
-                                 className="bg-emerald-500 shadow-sm px-6 h-11"
-                                 textClassName="text-white font-bold"
-                                 icon={<Plus size={18} color="white" />}
-                               />
-                            </View>
-                          </Swipeable>
-                        </View>
-                      );
-                    })}
-                </View>
+                        <TouchableOpacity
+                          onPress={() => toggleItemLock(item.id)}
+                          className="bg-white px-5 py-2 rounded-xl border border-[#E8E6E0] shadow-sm active:scale-95"
+                        >
+                          <Text className="text-xs font-bold text-sage-green">追加</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </Swipeable>
+                  </View>
+                );
+              })}
             </View>
+          </View>
         )}
       </ScrollView>
 
       {/* Footer Button */}
       <View 
-        className="p-4 bg-white border-t border-gray-100"
-        style={{ paddingBottom: insets.bottom > 0 ? insets.bottom : 20 }}
-       >
-        <Button 
-            title="終了" 
-            onPress={() => router.back()} 
-            className="w-full bg-gray-900 py-4"
-        />
+        className="px-6 pb-10 pt-4 bg-transparent absolute bottom-0 left-0 right-0"
+      >
+        <TouchableOpacity 
+          onPress={() => router.back()}
+          activeOpacity={0.9}
+          className="w-full bg-sage-green py-4 rounded-full shadow-lg items-center justify-center"
+        >
+          <Text className="text-white font-bold text-lg">ホームに戻る</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
