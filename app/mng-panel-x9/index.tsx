@@ -87,9 +87,13 @@ export default function AdminDashboard() {
                     </View>
                     <TouchableOpacity 
                         className="bg-white p-3 rounded-full shadow-sm border border-gray-100"
-                        onPress={() => router.back()}
+                        onPress={async () => {
+                            const { signOut } = await import('../../src/lib/auth');
+                            await signOut();
+                            router.replace('/');
+                        }}
                     >
-                        <LogOut size={20} color="#64748B" />
+                        <LogOut size={20} color="#EF4444" />
                     </TouchableOpacity>
                 </View>
 

@@ -172,9 +172,13 @@ export default function HomeScreen() {
       
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 60 }}>
         {/* Header (Clean) */}
-        <View className="pt-10 px-6 pb-4">
-          <Text className="text-xl font-bold text-[#2D332B]">ミールパス計算アプリ</Text>
-          <Text className="text-[10px] text-sage-green font-medium opacity-70">ver1.1.0 (Rec)</Text>
+        <View className="pt-10 px-6 pb-4 flex-row justify-between items-start">
+          <View>
+            <Text className="text-xl font-bold text-[#2D332B]">ミールパス計算アプリ</Text>
+            <TouchableOpacity onPress={() => router.push('/login')}>
+               <Text className="text-[10px] text-sage-green font-medium opacity-70">ver1.1.0 (Rec)</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Filter Scroll (Top) */}

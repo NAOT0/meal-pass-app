@@ -1,14 +1,70 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { Button } from './Button';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
+import { useCartStore } from '../store/useCartStore';
 
 interface AdminGuardProps {
   children: React.ReactNode;
 }
 
 export const AdminGuard: React.FC<AdminGuardProps> = ({ children }) => {
-  // 緊急回避: 認証・権限チェックをすべてスキップして常に表示
+  const router = useRouter();
+  const [checking, setChecking] = useState(true);
+  const { userRole, setUserRole } = useCartStore();
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  async function checkAuth() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        console.log('[AdminGuard] No session, redirecting to login');
+        router.replace('/login');
+        return;
+      }
+
+      // Check role if not already in store
+      if (!userRole) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+
+        const profile = data as { role: string } | null;
+
+        if (error || !profile || profile.role !== 'admin') {
+          console.log('[AdminGuard] Unauthorized role:', profile?.role);
+          router.replace('/login');
+          return;
+        }
+        
+        setUserRole(profile.role as any);
+      } else if (userRole !== 'admin') {
+        router.replace('/login');
+        return;
+      }
+
+      setChecking(false);
+    } catch (err) {
+      console.error('[AdminGuard] Error:', err);
+      router.replace('/login');
+    }
+  }
+
+  if (checking) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#2563EB" />
+        <Text style={styles.subtitle}>認証中...</Text>
+      </View>
+    );
+  }
+
   return <>{children}</>;
 };
 

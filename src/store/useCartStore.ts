@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Database } from '../types/schema';
+import { fillBudget } from '../features/recommendation/logic';
 
 type Product = Database['public']['Tables']['products']['Row'];
 
@@ -10,11 +11,13 @@ interface CartState {
   budget: number;
   products: Product[];
   filters: Record<number, boolean>;
+  userRole: 'admin' | 'guest' | null;
   
   // Actions
   setProducts: (items: Product[]) => void;
   setFilters: (filters: Record<number, boolean>) => void;
   setBudget: (amount: number) => void;
+  setUserRole: (role: 'admin' | 'guest' | null) => void;
   setCurrentList: (list: Product[]) => void;
   toggleItemLock: (productId: string) => void;
   updateQuantity: (productId: string, delta: number) => void;
@@ -29,10 +32,12 @@ export const useCartStore = create<CartState>((set, get) => ({
   budget: 0,
   products: [],
   filters: {},
+  userRole: null,
 
   setProducts: (items) => set({ products: items }),
   setFilters: (filters) => set({ filters: filters }),
   setBudget: (amount) => set({ budget: amount }),
+  setUserRole: (role) => set({ userRole: role }),
   setCurrentList: (list) => set({ currentList: list }),
 
   toggleItemLock: (productId) => set((state) => {
@@ -64,48 +69,58 @@ export const useCartStore = create<CartState>((set, get) => ({
   }),
 
   deleteItem: (productId) => set((state) => {
-    const { products, budget, filters } = state;
-    // 1. Remove from locked
-    const nextLocked = new Set(state.lockedIds);
+    const { products, budget, filters, quantities, lockedIds, currentList } = state;
+    
+    // 1. ロック解除と数量削除
+    const nextLocked = new Set(lockedIds);
     nextLocked.delete(productId);
 
-    // 2. Remove from quantities
-    const nextQuantities = { ...state.quantities };
+    const nextQuantities = { ...quantities };
     delete nextQuantities[productId];
 
-    // 3. Remove from list and try to refill
-    let nextList = state.currentList.filter(p => p.id !== productId);
+    // 2. 削除対象を除いたリストを作成
+    const remainingList = currentList.filter(p => p.id !== productId);
     
-    let currentTotal = 0;
-    nextList.forEach(item => {
-        const qty = nextQuantities[item.id] || 1;
-        currentTotal += item.price * qty;
+    // 3. fillBudget に渡すための準備
+    // 有効なフィルタを Set に変換
+    const allowedIds = new Set<number>();
+    Object.entries(filters).forEach(([id, enabled]) => {
+      if (enabled) allowedIds.add(Number(id));
     });
-    
-    let gap = (budget || 0) - currentTotal;
-    let attempts = 0;
-    while (gap > 0 && attempts < 15) { // Increased attempts for better refill
-        attempts++;
-        const candidatePool = products.filter(p => 
-            !nextList.find(existing => existing.id === p.id) && 
-            p.id !== productId && 
-            p.price <= gap && p.price > 0
-        );
-        const preferredPool = candidatePool.filter(p => p.category_id && filters[p.category_id]);
-        const finalPool = preferredPool.length > 0 ? preferredPool : candidatePool;
 
-        if (finalPool.length > 0) {
-            const randomItem = finalPool[Math.floor(Math.random() * finalPool.length)];
-            nextList = [...nextList, randomItem];
-            nextQuantities[randomItem.id] = 1;
-            gap -= randomItem.price;
-        } else break;
-    }
+    // 複数個指定されている商品の「2個目以降」の金額を予算から差し引く
+    // (fillBudgetは1個ずつの追加を想定しているため)
+    let extraQuantityCost = 0;
+    remainingList.forEach(p => {
+      if (nextLocked.has(p.id)) {
+        const qty = nextQuantities[p.id] || 1;
+        if (qty > 1) {
+          extraQuantityCost += p.price * (qty - 1);
+        }
+      }
+    });
+
+    const effectiveBudget = (budget || 0) - extraQuantityCost;
+
+    // 4. ホーム画面と同じロジックで補充
+    const { list } = fillBudget(
+      products,
+      remainingList,
+      nextLocked,
+      effectiveBudget,
+      allowedIds
+    );
+
+    // 5. 新しく追加された商品の数量を1に設定
+    const finalQuantities = { ...nextQuantities };
+    list.forEach(p => {
+      if (!finalQuantities[p.id]) finalQuantities[p.id] = 1;
+    });
 
     return {
-        currentList: nextList,
-        lockedIds: nextLocked,
-        quantities: nextQuantities
+      currentList: list,
+      lockedIds: nextLocked,
+      quantities: finalQuantities
     };
   }),
 }));

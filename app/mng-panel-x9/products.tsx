@@ -28,6 +28,7 @@ export default function ProductListScreen() {
     const [isAddModalVisible, setAddModalVisible] = useState(false);
     const [editingProduct, setEditingProduct] = useState<any>(null);
     const [newProduct, setNewProduct] = useState<any>({ name: '', price: '', category_id: 8, is_recommended: false, jan: '' });
+    const [isBulkUpdating, setIsBulkUpdating] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
@@ -36,6 +37,82 @@ export default function ProductListScreen() {
         }, 500);
         return () => clearTimeout(timer);
     }, [searchQuery, showOnlyRecommended]);
+
+    const handleBulkRecommend = async () => {
+        const confirmMsg = searchQuery 
+            ? `検索条件「${searchQuery}」に一致する ${total} 件の全商品を「おすすめ」に設定しますか？` 
+            : `登録されている全 ${total} 件の商品を「おすすめ」に設定しますか？`;
+        
+        if (Platform.OS === 'web') {
+            if (!window.confirm(confirmMsg)) return;
+        } else {
+            // For native, Alert.alert logic could be more complex, but keeping it simple for now as this is likely used on web management
+            const proceed = await new Promise(resolve => {
+                Alert.alert("一括設定", confirmMsg, [
+                    { text: "キャンセル", onPress: () => resolve(false), style: "cancel" },
+                    { text: "実行", onPress: () => resolve(true) }
+                ]);
+            });
+            if (!proceed) return;
+        }
+
+        setIsBulkUpdating(true);
+        try {
+            let targetProductIds: string[] = [];
+
+            // 検索条件がある場合は、条件に一致する全IDを取得
+            if (searchQuery) {
+                let filterQ = supabase.from('products').select('id').eq('is_active', true);
+                const terms = searchQuery.split(/[\s,]+/).filter(t => t.length > 0);
+                const janTerms = terms.filter(t => /^\d+$/.test(t));
+                const nameTerms = terms.filter(t => !/^\d+$/.test(t));
+
+                if (janTerms.length > 0) {
+                    let barcodeQuery = supabase.from('product_barcodes').select('product_id');
+                    const filters = janTerms.map(j => `jan_code.ilike.${j}%`).join(',');
+                    const { data: barcodeData } = await (barcodeQuery as any).or(filters);
+                    if (barcodeData) {
+                        const ids = barcodeData.map((b: any) => b.product_id);
+                        filterQ = filterQ.in('id', ids);
+                    }
+                }
+
+                if (nameTerms.length > 0) {
+                    nameTerms.forEach(term => {
+                        filterQ = filterQ.ilike('name', `%${term}%`);
+                    });
+                }
+
+                const { data: matchedProducts } = await filterQ;
+                if (matchedProducts) {
+                    targetProductIds = matchedProducts.map(p => p.id);
+                }
+            }
+
+            // 更新クエリの実行
+            let updateQ = (supabase.from('products') as any).update({ is_recommended: true }).eq('is_active', true);
+            
+            if (searchQuery) {
+                if (targetProductIds.length === 0) {
+                    Alert.alert('対象なし', '処理対象の商品が見つかりませんでした');
+                    setIsBulkUpdating(false);
+                    return;
+                }
+                updateQ = updateQ.in('id', targetProductIds);
+            }
+
+            const { error } = await updateQ;
+            if (error) throw error;
+
+            Alert.alert('成功', '一括設定が完了しました');
+            fetchProducts();
+        } catch (e) {
+            console.error(e);
+            Alert.alert('エラー', '一括更新に失敗しました');
+        } finally {
+            setIsBulkUpdating(false);
+        }
+    };
 
     const fetchProducts = async () => {
         setIsLoading(true);
@@ -218,25 +295,33 @@ export default function ProductListScreen() {
                     </TouchableOpacity>
                 </View>
 
-                <View className="flex-row gap-3">
-                    <View className="bg-gray-50 flex-1 flex-row items-center px-4 py-4 rounded-2xl border border-gray-100">
-                        <Search size={20} color="#94A3B8" />
+                <View className="gap-3">
+                    <View className="bg-gray-50 flex-row items-start px-4 py-4 rounded-2xl border border-gray-100">
+                        <View className="mt-1">
+                            <Search size={20} color="#94A3B8" />
+                        </View>
                         <TextInput 
-                            placeholder="名前またはJANコード（複数可）"
-                            className="flex-1 ml-3 text-[#1E293B] font-medium"
+                            placeholder="名前またはJANコード（複数可）&#10;改行で区切って入力できます"
+                            className="flex-1 ml-3 text-[#1E293B] font-medium min-h-[100px] text-base p-0"
+                            style={{ textAlignVertical: 'top' }}
                             value={searchQuery}
                             onChangeText={setSearchQuery}
                             placeholderTextColor="#94A3B8"
                             autoCapitalize="none"
+                            multiline={true}
+                            numberOfLines={4}
                         />
                     </View>
                     <TouchableOpacity 
                         onPress={() => setShowOnlyRecommended(!showOnlyRecommended)}
-                        className={`w-14 items-center justify-center rounded-2xl border ${
+                        className={`py-3 flex-row items-center justify-center rounded-2xl border ${
                             showOnlyRecommended ? 'bg-amber-100 border-amber-200' : 'bg-gray-50 border-gray-100'
                         }`}
                     >
-                        <Star size={24} color={showOnlyRecommended ? '#D97706' : '#94A3B8'} fill={showOnlyRecommended ? '#D97706' : 'none'} />
+                        <Star size={20} color={showOnlyRecommended ? '#D97706' : '#94A3B8'} fill={showOnlyRecommended ? '#D97706' : 'none'} className="mr-2" />
+                        <Text className={`font-bold ${showOnlyRecommended ? 'text-amber-700' : 'text-slate-400'}`}>
+                            {showOnlyRecommended ? 'おすすめのみ表示中' : 'おすすめのみに絞り込む'}
+                        </Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -256,11 +341,23 @@ export default function ProductListScreen() {
                             <Text className="text-slate-400 font-bold text-xs tracking-widest uppercase">
                                 {total > 50 ? `全${total.toLocaleString()}件中の上位50件` : `${total}件の商品`}
                             </Text>
-                            {showOnlyRecommended && (
-                                <View className="bg-amber-100 px-3 py-1 rounded-full">
-                                    <Text className="text-amber-700 text-[10px] font-bold">おすすめ中のみ表示</Text>
-                                </View>
-                            )}
+                            
+                            <TouchableOpacity 
+                                onPress={handleBulkRecommend}
+                                disabled={isBulkUpdating || total === 0}
+                                className={`flex-row items-center px-3 py-1.5 rounded-full border ${
+                                    isBulkUpdating ? 'bg-gray-100 border-gray-200' : 'bg-blue-50 border-blue-100 active:bg-blue-100'
+                                }`}
+                            >
+                                {isBulkUpdating ? (
+                                    <ActivityIndicator size="small" color="#2563EB" />
+                                ) : (
+                                    <Star size={14} color="#2563EB" fill="#2563EB" />
+                                )}
+                                <Text className="text-blue-700 text-[10px] font-bold ml-1">
+                                    {searchQuery ? '検索結果を全おすすめ' : '全商品をおすすめ'}
+                                </Text>
+                            </TouchableOpacity>
                         </View>
                     }
                     renderItem={({ item }) => (
