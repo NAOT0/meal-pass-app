@@ -60,14 +60,15 @@ export default function GameModal() {
         console.error('[Game] Voted Fetch Error:', votedError.message);
       }
       
-      const votedIds = votedData?.map(v => v.product_id) || [];
+      const votedIds = (votedData as any[])?.map(v => v.product_id) || [];
       console.log('[Game] Voted Items Count:', votedIds.length);
 
       // 2. Get total count of products (excluding voted) to pick a random offset
       let baseQuery = supabase
         .from('products')
         .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('is_verified', false);
 
       if (votedIds.length > 0 && votedIds.length < 500) { // Limit huge IN clauses
         baseQuery = baseQuery.not('id', 'in', `(${votedIds.join(',')})`);
@@ -89,7 +90,8 @@ export default function GameModal() {
       let query = supabase
         .from('products')
         .select('*')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('is_verified', false);
 
       if (votedIds.length > 0 && votedIds.length < 500) {
         query = query.not('id', 'in', `(${votedIds.join(',')})`);

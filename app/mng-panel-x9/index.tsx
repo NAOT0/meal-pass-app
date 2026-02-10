@@ -19,6 +19,7 @@ export default function AdminDashboard() {
     const [stats, setStats] = useState({
         totalProducts: 0,
         unverifiedCount: 0,
+        votedCount: 0,
         activeCategories: 0
     });
 
@@ -30,10 +31,15 @@ export default function AdminDashboard() {
         const { count: productsCount } = await supabase.from('products').select('*', { count: 'exact', head: true });
         const { count: unverified } = await supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_verified', false);
         const { count: categoriesCount } = await supabase.from('categories').select('*', { count: 'exact', head: true });
+        
+        // Count items with votes
+        const { data: voteData } = await supabase.from('classification_votes').select('product_id');
+        const uniqueVotedIds = new Set((voteData as any[])?.map(v => v.product_id) || []);
 
         setStats({
             totalProducts: productsCount || 0,
             unverifiedCount: unverified || 0,
+            votedCount: uniqueVotedIds.size,
             activeCategories: categoriesCount || 0
         });
     };
@@ -89,9 +95,9 @@ export default function AdminDashboard() {
 
                 {/* Stats Grid */}
                 <View className="flex-row mb-8 -mx-1">
-                    <StatMiniCard label="TOTAL PRODUCTS" value={stats.totalProducts} color="text-blue-600" />
-                    <StatMiniCard label="UNVERIFIED" value={stats.unverifiedCount} color="text-amber-500" />
-                    <StatMiniCard label="CATEGORIES" value={stats.activeCategories} color="text-indigo-600" />
+                    <StatMiniCard label="全商品" value={stats.totalProducts} color="text-blue-600" />
+                    <StatMiniCard label="未認証" value={stats.unverifiedCount} color="text-amber-500" />
+                    <StatMiniCard label="投票済み" value={stats.votedCount} color="text-pink-600" />
                 </View>
 
                 {/* Main Menu */}
@@ -106,12 +112,21 @@ export default function AdminDashboard() {
                 />
 
                 <MenuCard 
-                    title="Product List"
-                    subtitle="登録商品の検索・管理"
+                    title="商品一覧"
+                    subtitle="登録商品の検索・おすすめ・追加"
                     icon={Package}
                     color="bg-indigo-600"
                     onPress={() => router.push('/mng-panel-x9/products')}
                     badge={stats.unverifiedCount > 0 ? stats.unverifiedCount : null}
+                />
+
+                <MenuCard 
+                    title="ユーザー投票の承認"
+                    subtitle="仕分けゲームの結果を反映"
+                    icon={TrendingUp}
+                    color="bg-pink-600"
+                    onPress={() => router.push('/mng-panel-x9/votes')}
+                    badge={stats.votedCount > 0 ? stats.votedCount : null}
                 />
 
                 <MenuCard 
