@@ -210,7 +210,7 @@ export default function HomeScreen() {
 
         {/* Budget Card */}
         <View className="px-6">
-          <View className="bg-sage-green rounded-xl p-6 shadow-xl shadow-sage-green/10">
+          <View className="bg-sage-green rounded-3xl p-6 shadow-lg overflow-hidden">
             <Text className="text-[13px] font-bold text-white opacity-90 mb-2">本日の残高</Text>
             
             <View className="flex-row items-center mb-6">
@@ -241,7 +241,7 @@ export default function HomeScreen() {
               activeOpacity={0.8}
               onPress={() => handleRecommend(false)}
               disabled={!budget}
-              className={`bg-white rounded-xl py-4 items-center justify-center shadow-sm ${!budget ? 'opacity-50' : ''}`}
+              className={`bg-white rounded-2xl py-4 items-center justify-center ${!budget ? 'opacity-50' : ''}`}
             >
               <Text className="text-sage-green font-bold text-lg">組み合わせを提案</Text>
             </TouchableOpacity>
