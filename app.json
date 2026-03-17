@@ -13,20 +13,7 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.naoto.mealpass",
-      "infoPlist": {
-        "NSUserTrackingUsageDescription": "ユーザーに合わせた最適な広告を表示するために使用されます。"
-      },
-      "privacyManifests": {
-        "NSPrivacyAccessedAPITypes": [
-          {
-            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
-            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
-          }
-        ],
-        "NSPrivacyTracking": true
-      }
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
@@ -52,27 +39,7 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store",
-      "expo-dev-client",
-      [
-        "expo-tracking-transparency",
-        {
-          "userTrackingPermission": "ユーザーに合わせた最適な広告を表示するために使用されます。"
-        }
-      ],
-      [
-        "react-native-google-mobile-ads",
-        {
-          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
-          "iosAppId": "ca-app-pub-3940256099942544~1458041111"
-        }
-      ]
-    ],
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "1d33b88f-d924-471a-8cef-3b52c2ce7616"
-      }
-    }
+      "expo-secure-store"
+    ]
   }
 }

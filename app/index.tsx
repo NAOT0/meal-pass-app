@@ -1,4 +1,4 @@
-import { View, Text, TextInput, ScrollView, SafeAreaView, Platform, LayoutAnimation, UIManager, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, TextInput, ScrollView, SafeAreaView, Platform, LayoutAnimation, UIManager, TouchableOpacity, StatusBar, Alert } from 'react-native';
 import { useState, useEffect } from 'react';
 import { signInAnonymously } from '../src/lib/auth';
 import { Button } from '../src/components/Button';
@@ -80,45 +80,59 @@ export default function HomeScreen() {
   const fetchProducts = async () => {
     console.log('--- DB Fetch Start ---');
     
-    // RPC: おすすめを先頭に、それ以外はランダムで取得
-    const { data, error } = await supabase
-      .rpc('get_active_products_random', { row_limit: 1000 });
-    
-    if (data) {
-      // RPCの戻り値はフラットなので、既存コードが期待する形に整形
-      const shaped = (data as any[]).map(row => ({
-        id: row.id,
-        name: row.name,
-        price: row.price,
-        category_id: row.category_id,
-        image_url: row.image_url,
-        is_active: row.is_active,
-        is_verified: row.is_verified,
-        is_recommended: row.is_recommended,
-        is_temporary: row.is_temporary,
-        expires_at: row.expires_at,
-        created_at: row.created_at,
-        // categories(*) 相当のネストオブジェクトを再構築
-        categories: row.category_name ? {
-          id: row.category_id,
-          name: row.category_name,
-          slug: row.category_slug,
-          recommendation_weight: row.category_recommendation_weight,
-        } : null,
-      }));
-
-      const recCount = shaped.filter(p => p.is_recommended).length;
-      console.log(`[Fetch Result] Total: ${shaped.length}, Recommended: ${recCount}`);
+    try {
+      // RPC: おすすめを先頭に、それ以外はランダムで取得
+      const { data, error } = await supabase
+        .rpc('get_active_products_random', { row_limit: 1000 });
       
-      if (recCount > 0) {
-        const sample = shaped.find(p => p.is_recommended);
-        console.log('[Sample Recommended Item]', { id: sample?.id, name: sample?.name, is_rec: sample?.is_recommended });
+      if (error) {
+        throw error;
       }
 
-      setProducts(shaped as any);
-      useCartStore.getState().setProducts(shaped as any);
-    } else {
+      if (data) {
+        // RPCの戻り値はフラットなので、既存コードが期待する形に整形
+        const shaped = (data as any[]).map(row => ({
+          id: row.id,
+          name: row.name,
+          price: row.price,
+          category_id: row.category_id,
+          image_url: row.image_url,
+          is_active: row.is_active,
+          is_verified: row.is_verified,
+          is_recommended: row.is_recommended,
+          is_temporary: row.is_temporary,
+          expires_at: row.expires_at,
+          created_at: row.created_at,
+          // categories(*) 相当のネストオブジェクトを再構築
+          categories: row.category_name ? {
+            id: row.category_id,
+            name: row.category_name,
+            slug: row.category_slug,
+            recommendation_weight: row.category_recommendation_weight,
+          } : null,
+        }));
+
+        const recCount = shaped.filter(p => p.is_recommended).length;
+        console.log(`[Fetch Result] Total: ${shaped.length}, Recommended: ${recCount}`);
+        
+        if (recCount > 0) {
+          const sample = shaped.find(p => p.is_recommended);
+          console.log('[Sample Recommended Item]', { id: sample?.id, name: sample?.name, is_rec: sample?.is_recommended });
+        }
+
+        setProducts(shaped as any);
+        useCartStore.getState().setProducts(shaped as any);
+      }
+    } catch (error) {
       console.error('Fetch error:', error);
+      Alert.alert(
+        'ネットワークエラー',
+        '通信環境をご確認の上、再度お試しください。\nオフラインのためデータを取得できませんでした。',
+        [
+          { text: 'キャンセル', style: 'cancel' },
+          { text: '再試行', onPress: () => fetchProducts() }
+        ]
+      );
     }
     console.log('--- DB Fetch End ---');
   };

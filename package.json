@@ -47,6 +47,7 @@
   "devDependencies": {
     "@types/react": "~19.1.0",
     "autoprefixer": "^10.4.24",
+    "babel-plugin-transform-remove-console": "^6.9.4",
     "babel-preset-expo": "~54.0.10",
     "postcss": "^8.5.6",
     "tailwindcss": "3.3.2",

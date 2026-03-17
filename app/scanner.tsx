@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, StatusBar, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, StatusBar, Platform, Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Flashlight, FlashlightOff, X, CheckCircle2, ShoppingCart } from 'lucide-react-native';
 import { supabase } from '../src/lib/supabase';
@@ -221,7 +221,9 @@ export default function ScannerScreen() {
         .limit(1)
         .maybeSingle();
 
-      if (barcodeError || !barcodeData) {
+      if (barcodeError) throw barcodeError;
+
+      if (!barcodeData) {
          console.log('[Scanner] Barcode not found in DB:', data);
          setTimeout(() => { lockScanRef.current = false; }, 1000);
          return;
@@ -233,7 +235,9 @@ export default function ScannerScreen() {
         .eq('id', (barcodeData as any).product_id)
         .single();
       
-      if (productError || !productData) {
+      if (productError) throw productError;
+
+      if (!productData) {
         console.log('[Scanner] Product not found:', (barcodeData as any).product_id);
         setTimeout(() => { lockScanRef.current = false; }, 1000);
         return;
@@ -260,7 +264,8 @@ export default function ScannerScreen() {
 
     } catch (error) {
       console.error('[Scanner] Error:', error);
-      lockScanRef.current = false;
+      Alert.alert('通信エラー', 'オフラインのため商品情報を取得できませんでした。\nネットワーク接続をご確認ください。');
+      setTimeout(() => { lockScanRef.current = false; }, 2000);
     }
   }, [scanned, addFromScan]);
 

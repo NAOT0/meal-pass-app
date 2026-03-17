@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions, StatusBar, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions, StatusBar, ScrollView, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { Flashlight, FlashlightOff, X, CheckCircle2, ShoppingCart } from 'lucide-react-native';
@@ -85,7 +85,9 @@ export const BarcodeScanner = ({
         .limit(1)
         .maybeSingle();
 
-      if (barcodeError || !barcodeData) {
+      if (barcodeError) throw barcodeError;
+
+      if (!barcodeData) {
         console.log('Product not found for barcode:', data);
          setTimeout(() => {
             lockScanRef.current = false;
@@ -103,7 +105,9 @@ export const BarcodeScanner = ({
         .returns<Product>()
         .single();
       
-      if (productError || !product) {
+      if (productError) throw productError;
+
+      if (!product) {
         console.log('Product details fetch error:', productError);
         setTimeout(() => { lockScanRef.current = false; }, 1000);
         return;
@@ -126,7 +130,8 @@ export const BarcodeScanner = ({
 
     } catch (error) {
       console.error('Scan handling error:', error);
-      lockScanRef.current = false;
+      Alert.alert('通信エラー', 'オフラインのため商品情報を取得できませんでした。\nネットワーク接続をご確認ください。');
+      setTimeout(() => { lockScanRef.current = false; }, 2000);
     }
   };
 

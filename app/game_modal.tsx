@@ -1,4 +1,4 @@
-import { View, Text, SafeAreaView, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, SafeAreaView, ActivityIndicator, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useState, useEffect } from 'react';
 import { supabase } from '../src/lib/supabase';
 import { Database } from '../src/types/schema';
@@ -58,6 +58,7 @@ export default function GameModal() {
       
       if (votedError) {
         console.error('[Game] Voted Fetch Error:', votedError.message);
+        throw votedError;
       }
       
       const votedIds = (votedData as any[])?.map(v => v.product_id) || [];
@@ -77,6 +78,7 @@ export default function GameModal() {
       const { count, error: countError } = await baseQuery;
       if (countError) {
         console.error('[Game] Count Error:', countError.message);
+        throw countError;
       }
 
       const totalAvailable = count || 0;
@@ -102,6 +104,7 @@ export default function GameModal() {
       
       if (fetchError) {
         console.error('[Game] Products Fetch Error:', fetchError.message);
+        throw fetchError;
       }
 
       if (data) {
@@ -112,6 +115,14 @@ export default function GameModal() {
       }
     } catch (err) {
       console.error('[Game] Unexpected error:', err);
+      Alert.alert(
+        '通信エラー',
+        'オフラインのためデータを取得できませんでした。\nネットワーク接続をご確認ください。',
+        [
+          { text: '戻る', style: 'cancel', onPress: () => router.back() },
+          { text: '再試行', onPress: () => fetchUnverifiedProducts() }
+        ]
+      );
     } finally {
       setLoading(false);
     }
