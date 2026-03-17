@@ -143,5 +143,35 @@ export interface Database {
         ]
       }
     }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      get_active_products_random: {
+        Args: { row_limit?: number }
+        Returns: {
+          id: string
+          name: string
+          price: number
+          category_id: number | null
+          image_url: string | null
+          is_active: boolean
+          is_verified: boolean
+          is_recommended: boolean
+          is_temporary: boolean
+          expires_at: string | null
+          created_at: string
+          category_name: string | null
+          category_slug: string | null
+          category_recommendation_weight: number | null
+        }[]
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }

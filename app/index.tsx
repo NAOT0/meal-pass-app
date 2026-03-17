@@ -79,27 +79,44 @@ export default function HomeScreen() {
 
   const fetchProducts = async () => {
     console.log('--- DB Fetch Start ---');
-    const now = new Date().toISOString();
     
+    // RPC: おすすめを先頭に、それ以外はランダムで取得
     const { data, error } = await supabase
-      .from('products')
-      .select('*, categories(*)')
-      .eq('is_active', true)
-      .or(`expires_at.is.null,expires_at.gt.${now}`)
-      .order('is_recommended', { ascending: false })
-      .limit(1000); // Standard limit
+      .rpc('get_active_products_random', { row_limit: 1000 });
     
-     if (data) {
-      const recCount = data.filter(p => (p as any).is_recommended).length;
-      console.log(`[Fetch Result] Total: ${data.length}, Recommended: ${recCount}`);
+    if (data) {
+      // RPCの戻り値はフラットなので、既存コードが期待する形に整形
+      const shaped = (data as any[]).map(row => ({
+        id: row.id,
+        name: row.name,
+        price: row.price,
+        category_id: row.category_id,
+        image_url: row.image_url,
+        is_active: row.is_active,
+        is_verified: row.is_verified,
+        is_recommended: row.is_recommended,
+        is_temporary: row.is_temporary,
+        expires_at: row.expires_at,
+        created_at: row.created_at,
+        // categories(*) 相当のネストオブジェクトを再構築
+        categories: row.category_name ? {
+          id: row.category_id,
+          name: row.category_name,
+          slug: row.category_slug,
+          recommendation_weight: row.category_recommendation_weight,
+        } : null,
+      }));
+
+      const recCount = shaped.filter(p => p.is_recommended).length;
+      console.log(`[Fetch Result] Total: ${shaped.length}, Recommended: ${recCount}`);
       
       if (recCount > 0) {
-          const sample = data.find(p => (p as any).is_recommended);
-          console.log('[Sample Recommended Item]', { id: sample.id, name: sample.name, is_rec: (sample as any).is_recommended });
+        const sample = shaped.find(p => p.is_recommended);
+        console.log('[Sample Recommended Item]', { id: sample?.id, name: sample?.name, is_rec: sample?.is_recommended });
       }
 
-      setProducts(data as any);
-      useCartStore.getState().setProducts(data as any);
+      setProducts(shaped as any);
+      useCartStore.getState().setProducts(shaped as any);
     } else {
       console.error('Fetch error:', error);
     }

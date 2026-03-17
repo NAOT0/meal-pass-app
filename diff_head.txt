@@ -1,0 +1,538 @@
+﻿diff --git a/app.json b/app.json
+index 5d5fcbb..33c60d5 100644
+--- a/app.json
++++ b/app.json
+@@ -13,7 +13,20 @@
+       "backgroundColor": "#ffffff"
+     },
+     "ios": {
+-      "supportsTablet": true
++      "supportsTablet": true,
++      "bundleIdentifier": "com.naoto.mealpass",
++      "infoPlist": {
++        "NSUserTrackingUsageDescription": "繝ｦ繝ｼ繧ｶ繝ｼ縺ｫ蜷医ｏ縺帙◆譛驕ｩ縺ｪ蠎・相繧定｡ｨ遉ｺ縺吶ｋ縺溘ａ縺ｫ菴ｿ逕ｨ縺輔ｌ縺ｾ縺吶・
++      },
++      "privacyManifests": {
++        "NSPrivacyAccessedAPITypes": [
++          {
++            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
++            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
++          }
++        ],
++        "NSPrivacyTracking": true
++      }
+     },
+     "android": {
+       "adaptiveIcon": {
+@@ -39,7 +52,27 @@
+     },
+     "plugins": [
+       "expo-router",
+-      "expo-secure-store"
+-    ]
++      "expo-secure-store",
++      "expo-dev-client",
++      [
++        "expo-tracking-transparency",
++        {
++          "userTrackingPermission": "繝ｦ繝ｼ繧ｶ繝ｼ縺ｫ蜷医ｏ縺帙◆譛驕ｩ縺ｪ蠎・相繧定｡ｨ遉ｺ縺吶ｋ縺溘ａ縺ｫ菴ｿ逕ｨ縺輔ｌ縺ｾ縺吶・
++        }
++      ],
++      [
++        "react-native-google-mobile-ads",
++        {
++          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
++          "iosAppId": "ca-app-pub-3940256099942544~1458041111"
++        }
++      ]
++    ],
++    "extra": {
++      "router": {},
++      "eas": {
++        "projectId": "1d33b88f-d924-471a-8cef-3b52c2ce7616"
++      }
++    }
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/app/index.tsx b/app/index.tsx
+index e01e039..f850f72 100644
+--- a/app/index.tsx
++++ b/app/index.tsx
+@@ -79,27 +79,44 @@ export default function HomeScreen() {
+ 
+   const fetchProducts = async () => {
+     console.log('--- DB Fetch Start ---');
+-    const now = new Date().toISOString();
+     
++    // RPC: 縺翫☆縺吶ａ繧貞・鬆ｭ縺ｫ縲√◎繧御ｻ･螟悶・繝ｩ繝ｳ繝繝縺ｧ蜿門ｾ・     const { data, error } = await supabase
+-      .from('products')
+-      .select('*, categories(*)')
+-      .eq('is_active', true)
+-      .or(`expires_at.is.null,expires_at.gt.${now}`)
+-      .order('is_recommended', { ascending: false })
+-      .limit(1000); // Standard limit
++      .rpc('get_active_products_random', { row_limit: 1000 });
+     
+-     if (data) {
+-      const recCount = data.filter(p => (p as any).is_recommended).length;
+-      console.log(`[Fetch Result] Total: ${data.length}, Recommended: ${recCount}`);
++    if (data) {
++      // RPC縺ｮ謌ｻ繧雁､縺ｯ繝輔Λ繝・ヨ縺ｪ縺ｮ縺ｧ縲∵里蟄倥さ繝ｼ繝峨′譛溷ｾ・☆繧句ｽ｢縺ｫ謨ｴ蠖｢
++      const shaped = (data as any[]).map(row => ({
++        id: row.id,
++        name: row.name,
++        price: row.price,
++        category_id: row.category_id,
++        image_url: row.image_url,
++        is_active: row.is_active,
++        is_verified: row.is_verified,
++        is_recommended: row.is_recommended,
++        is_temporary: row.is_temporary,
++        expires_at: row.expires_at,
++        created_at: row.created_at,
++        // categories(*) 逶ｸ蠖薙・繝阪せ繝医が繝悶ず繧ｧ繧ｯ繝医ｒ蜀肴ｧ狗ｯ・+        categories: row.category_name ? {
++          id: row.category_id,
++          name: row.category_name,
++          slug: row.category_slug,
++          recommendation_weight: row.category_recommendation_weight,
++        } : null,
++      }));
++
++      const recCount = shaped.filter(p => p.is_recommended).length;
++      console.log(`[Fetch Result] Total: ${shaped.length}, Recommended: ${recCount}`);
+       
+       if (recCount > 0) {
+-          const sample = data.find(p => (p as any).is_recommended);
+-          console.log('[Sample Recommended Item]', { id: sample.id, name: sample.name, is_rec: (sample as any).is_recommended });
++        const sample = shaped.find(p => p.is_recommended);
++        console.log('[Sample Recommended Item]', { id: sample?.id, name: sample?.name, is_rec: sample?.is_recommended });
+       }
+ 
+-      setProducts(data as any);
+-      useCartStore.getState().setProducts(data as any);
++      setProducts(shaped as any);
++      useCartStore.getState().setProducts(shaped as any);
+     } else {
+       console.error('Fetch error:', error);
+     }
+diff --git a/eas.json b/eas.json
+new file mode 100644
+index 0000000..c95e28c
+--- /dev/null
++++ b/eas.json
+@@ -0,0 +1,24 @@
++{
++  "cli": {
++    "version": ">= 18.1.0",
++    "appVersionSource": "remote"
++  },
++  "build": {
++    "development": {
++      "developmentClient": true,
++      "distribution": "internal",
++      "ios": {
++        "simulator": false
++      }
++    },
++    "preview": {
++      "distribution": "internal"
++    },
++    "production": {
++      "autoIncrement": true
++    }
++  },
++  "submit": {
++    "production": {}
++  }
++}
+diff --git a/package-lock.json b/package-lock.json
+index d1e6b5f..7832c36 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -15,6 +15,7 @@
+         "expo": "~54.0.33",
+         "expo-camera": "~17.0.10",
+         "expo-constants": "~18.0.13",
++        "expo-dev-client": "~6.0.20",
+         "expo-document-picker": "~14.0.8",
+         "expo-file-system": "~19.0.21",
+         "expo-haptics": "~15.0.8",
+@@ -22,12 +23,14 @@
+         "expo-router": "~6.0.23",
+         "expo-secure-store": "~15.0.8",
+         "expo-status-bar": "~3.0.9",
++        "expo-tracking-transparency": "~6.0.8",
+         "lucide-react-native": "^0.563.0",
+         "nativewind": "^2.0.11",
+         "react": "19.1.0",
+         "react-dom": "19.1.0",
+         "react-native": "0.81.5",
+         "react-native-gesture-handler": "~2.28.0",
++        "react-native-google-mobile-ads": "^16.2.2",
+         "react-native-reanimated": "~4.1.1",
+         "react-native-safe-area-context": "~5.6.0",
+         "react-native-screens": "~4.16.0",
+@@ -2568,6 +2571,12 @@
+         "node": ">=8"
+       }
+     },
++    "node_modules/@iabtcf/core": {
++      "version": "1.5.6",
++      "resolved": "https://registry.npmjs.org/@iabtcf/core/-/core-1.5.6.tgz",
++      "integrity": "sha512-u2q9thI9vLurYZdGtyJsDYOqoeLc4EgQsYGSc+UVibYII61B/ENJPZS6eFlML1F0hSoTR/goptpo5nGRDkKd2w==",
++      "license": "Apache-2.0"
++    },
+     "node_modules/@isaacs/balanced-match": {
+       "version": "4.0.1",
+       "resolved": "https://registry.npmjs.org/@isaacs/balanced-match/-/balanced-match-4.0.1.tgz",
+@@ -3959,6 +3968,22 @@
+         "node": ">= 14"
+       }
+     },
++    "node_modules/ajv": {
++      "version": "8.18.0",
++      "resolved": "https://registry.npmjs.org/ajv/-/ajv-8.18.0.tgz",
++      "integrity": "sha512-PlXPeEWMXMZ7sPYOHqmDyCJzcfNrUr3fGNKtezX14ykXOEIvyK81d+qydx89KY5O71FKMPaQ2vBfBFI5NHR63A==",
++      "license": "MIT",
++      "dependencies": {
++        "fast-deep-equal": "^3.1.3",
++        "fast-uri": "^3.0.1",
++        "json-schema-traverse": "^1.0.0",
++        "require-from-string": "^2.0.2"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/epoberezkin"
++      }
++    },
+     "node_modules/anser": {
+       "version": "1.4.10",
+       "resolved": "https://registry.npmjs.org/anser/-/anser-1.4.10.tgz",
+@@ -5326,6 +5351,15 @@
+         "node": ">= 0.8"
+       }
+     },
++    "node_modules/dequal": {
++      "version": "2.0.3",
++      "resolved": "https://registry.npmjs.org/dequal/-/dequal-2.0.3.tgz",
++      "integrity": "sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=6"
++      }
++    },
+     "node_modules/destroy": {
+       "version": "1.2.0",
+       "resolved": "https://registry.npmjs.org/destroy/-/destroy-1.2.0.tgz",
+@@ -5658,6 +5692,57 @@
+         "react-native": "*"
+       }
+     },
++    "node_modules/expo-dev-client": {
++      "version": "6.0.20",
++      "resolved": "https://registry.npmjs.org/expo-dev-client/-/expo-dev-client-6.0.20.tgz",
++      "integrity": "sha512-5XjoVlj1OxakNxy55j/AUaGPrDOlQlB6XdHLLWAw61w5ffSpUDHDnuZzKzs9xY1eIaogOqTOQaAzZ2ddBkdXLA==",
++      "license": "MIT",
++      "dependencies": {
++        "expo-dev-launcher": "6.0.20",
++        "expo-dev-menu": "7.0.18",
++        "expo-dev-menu-interface": "2.0.0",
++        "expo-manifests": "~1.0.10",
++        "expo-updates-interface": "~2.0.0"
++      },
++      "peerDependencies": {
++        "expo": "*"
++      }
++    },
++    "node_modules/expo-dev-launcher": {
++      "version": "6.0.20",
++      "resolved": "https://registry.npmjs.org/expo-dev-launcher/-/expo-dev-launcher-6.0.20.tgz",
++      "integrity": "sha512-a04zHEeT9sB0L5EB38fz7sNnUKJ2Ar1pXpcyl60Ki8bXPNCs9rjY7NuYrDkP/irM8+1DklMBqHpyHiLyJ/R+EA==",
++      "license": "MIT",
++      "dependencies": {
++        "ajv": "^8.11.0",
++        "expo-dev-menu": "7.0.18",
++        "expo-manifests": "~1.0.10"
++      },
++      "peerDependencies": {
++        "expo": "*"
++      }
++    },
++    "node_modules/expo-dev-menu": {
++      "version": "7.0.18",
++      "resolved": "https://registry.npmjs.org/expo-dev-menu/-/expo-dev-menu-7.0.18.tgz",
++      "integrity": "sha512-4kTdlHrnZCAWCT6tZRQHSSjZ7vECFisL4T+nsG/GJDo/jcHNaOVGV5qPV9wzlTxyMk3YOPggRw4+g7Ownrg5eA==",
++      "license": "MIT",
++      "dependencies": {
++        "expo-dev-menu-interface": "2.0.0"
++      },
++      "peerDependencies": {
++        "expo": "*"
++      }
++    },
++    "node_modules/expo-dev-menu-interface": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/expo-dev-menu-interface/-/expo-dev-menu-interface-2.0.0.tgz",
++      "integrity": "sha512-BvAMPt6x+vyXpThsyjjOYyjwfjREV4OOpQkZ0tNl+nGpsPfcY9mc6DRACoWnH9KpLzyIt3BOgh3cuy/h/OxQjw==",
++      "license": "MIT",
++      "peerDependencies": {
++        "expo": "*"
++      }
++    },
+     "node_modules/expo-document-picker": {
+       "version": "14.0.8",
+       "resolved": "https://registry.npmjs.org/expo-document-picker/-/expo-document-picker-14.0.8.tgz",
+@@ -5686,6 +5771,12 @@
+         "expo": "*"
+       }
+     },
++    "node_modules/expo-json-utils": {
++      "version": "0.15.0",
++      "resolved": "https://registry.npmjs.org/expo-json-utils/-/expo-json-utils-0.15.0.tgz",
++      "integrity": "sha512-duRT6oGl80IDzH2LD2yEFWNwGIC2WkozsB6HF3cDYNoNNdUvFk6uN3YiwsTsqVM/D0z6LEAQ01/SlYvN+Fw0JQ==",
++      "license": "MIT"
++    },
+     "node_modules/expo-linking": {
+       "version": "8.0.11",
+       "resolved": "https://registry.npmjs.org/expo-linking/-/expo-linking-8.0.11.tgz",
+@@ -5700,6 +5791,19 @@
+         "react-native": "*"
+       }
+     },
++    "node_modules/expo-manifests": {
++      "version": "1.0.10",
++      "resolved": "https://registry.npmjs.org/expo-manifests/-/expo-manifests-1.0.10.tgz",
++      "integrity": "sha512-oxDUnURPcL4ZsOBY6X1DGWGuoZgVAFzp6PISWV7lPP2J0r8u1/ucuChBgpK7u1eLGFp6sDIPwXyEUCkI386XSQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@expo/config": "~12.0.11",
++        "expo-json-utils": "~0.15.0"
++      },
++      "peerDependencies": {
++        "expo": "*"
++      }
++    },
+     "node_modules/expo-modules-autolinking": {
+       "version": "3.0.24",
+       "resolved": "https://registry.npmjs.org/expo-modules-autolinking/-/expo-modules-autolinking-3.0.24.tgz",
+@@ -6118,6 +6222,25 @@
+         "react-native": "*"
+       }
+     },
++    "node_modules/expo-tracking-transparency": {
++      "version": "6.0.8",
++      "resolved": "https://registry.npmjs.org/expo-tracking-transparency/-/expo-tracking-transparency-6.0.8.tgz",
++      "integrity": "sha512-4/NW47Kmrtj3J0udUmzxiq01gRY+vG8wFsUop6CTOVWlk+2MypjDFwBSscHcyiS2dJGNQLOQSBZ1RNhLdgSBOQ==",
++      "license": "MIT",
++      "peerDependencies": {
++        "expo": "*",
++        "react-native": "*"
++      }
++    },
++    "node_modules/expo-updates-interface": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/expo-updates-interface/-/expo-updates-interface-2.0.0.tgz",
++      "integrity": "sha512-pTzAIufEZdVPKql6iMi5ylVSPqV1qbEopz9G6TSECQmnNde2nwq42PxdFBaUEd8IZJ/fdJLQnOT3m6+XJ5s7jg==",
++      "license": "MIT",
++      "peerDependencies": {
++        "expo": "*"
++      }
++    },
+     "node_modules/expo/node_modules/@babel/code-frame": {
+       "version": "7.29.0",
+       "resolved": "https://registry.npmjs.org/@babel/code-frame/-/code-frame-7.29.0.tgz",
+@@ -6540,6 +6663,22 @@
+       "integrity": "sha512-lhd/wF+Lk98HZoTCtlVraHtfh5XYijIjalXck7saUtuanSDyLMxnHhSXEDJqHxD7msR8D0uCmqlkwjCV8xvwHw==",
+       "license": "MIT"
+     },
++    "node_modules/fast-uri": {
++      "version": "3.1.0",
++      "resolved": "https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.0.tgz",
++      "integrity": "sha512-iPeeDKJSWf4IEOasVVrknXpaBV0IApz/gp7S2bb7Z4Lljbl2MGJRqInZiUrQwV16cpzw/D3S5j5Julj/gT52AA==",
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/fastify"
++        },
++        {
++          "type": "opencollective",
++          "url": "https://opencollective.com/fastify"
++        }
++      ],
++      "license": "BSD-3-Clause"
++    },
+     "node_modules/fastq": {
+       "version": "1.20.1",
+       "resolved": "https://registry.npmjs.org/fastq/-/fastq-1.20.1.tgz",
+@@ -7717,6 +7856,12 @@
+       "integrity": "sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ==",
+       "license": "MIT"
+     },
++    "node_modules/json-schema-traverse": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-1.0.0.tgz",
++      "integrity": "sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==",
++      "license": "MIT"
++    },
+     "node_modules/json5": {
+       "version": "2.2.3",
+       "resolved": "https://registry.npmjs.org/json5/-/json5-2.2.3.tgz",
+@@ -9685,6 +9830,24 @@
+         "react-native": "*"
+       }
+     },
++    "node_modules/react-native-google-mobile-ads": {
++      "version": "16.2.2",
++      "resolved": "https://registry.npmjs.org/react-native-google-mobile-ads/-/react-native-google-mobile-ads-16.2.2.tgz",
++      "integrity": "sha512-PHLTJikmlH3ZEPkPRU0ehiwjw28TrQtZFpmasSdN62Wv0uojqsmXGIB3OcYbMNvc1PD0Jg5ao+5pdH4k2/bsyA==",
++      "license": "Apache-2.0",
++      "dependencies": {
++        "@iabtcf/core": "^1.5.6",
++        "use-deep-compare-effect": "^1.8.1"
++      },
++      "peerDependencies": {
++        "expo": ">=47.0.0"
++      },
++      "peerDependenciesMeta": {
++        "expo": {
++          "optional": true
++        }
++      }
++    },
+     "node_modules/react-native-is-edge-to-edge": {
+       "version": "1.2.1",
+       "resolved": "https://registry.npmjs.org/react-native-is-edge-to-edge/-/react-native-is-edge-to-edge-1.2.1.tgz",
+@@ -11462,6 +11625,23 @@
+         }
+       }
+     },
++    "node_modules/use-deep-compare-effect": {
++      "version": "1.8.1",
++      "resolved": "https://registry.npmjs.org/use-deep-compare-effect/-/use-deep-compare-effect-1.8.1.tgz",
++      "integrity": "sha512-kbeNVZ9Zkc0RFGpfMN3MNfaKNvcLNyxOAAd9O4CBZ+kCBXXscn9s/4I+8ytUER4RDpEYs5+O6Rs4PqiZ+rHr5Q==",
++      "license": "MIT",
++      "dependencies": {
++        "@babel/runtime": "^7.12.5",
++        "dequal": "^2.0.2"
++      },
++      "engines": {
++        "node": ">=10",
++        "npm": ">=6"
++      },
++      "peerDependencies": {
++        "react": ">=16.13"
++      }
++    },
+     "node_modules/use-latest-callback": {
+       "version": "0.2.6",
+       "resolved": "https://registry.npmjs.org/use-latest-callback/-/use-latest-callback-0.2.6.tgz",
+diff --git a/package.json b/package.json
+index 6c22934..9f3428d 100644
+--- a/package.json
++++ b/package.json
+@@ -18,6 +18,7 @@
+     "expo": "~54.0.33",
+     "expo-camera": "~17.0.10",
+     "expo-constants": "~18.0.13",
++    "expo-dev-client": "~6.0.20",
+     "expo-document-picker": "~14.0.8",
+     "expo-file-system": "~19.0.21",
+     "expo-haptics": "~15.0.8",
+@@ -25,12 +26,14 @@
+     "expo-router": "~6.0.23",
+     "expo-secure-store": "~15.0.8",
+     "expo-status-bar": "~3.0.9",
++    "expo-tracking-transparency": "~6.0.8",
+     "lucide-react-native": "^0.563.0",
+     "nativewind": "^2.0.11",
+     "react": "19.1.0",
+     "react-dom": "19.1.0",
+     "react-native": "0.81.5",
+     "react-native-gesture-handler": "~2.28.0",
++    "react-native-google-mobile-ads": "^16.2.2",
+     "react-native-reanimated": "~4.1.1",
+     "react-native-safe-area-context": "~5.6.0",
+     "react-native-screens": "~4.16.0",
+diff --git a/src/features/recommendation/logic.ts b/src/features/recommendation/logic.ts
+index 0ddadf2..8a6db53 100644
+--- a/src/features/recommendation/logic.ts
++++ b/src/features/recommendation/logic.ts
+@@ -4,8 +4,6 @@ type Product = Database['public']['Tables']['products']['Row'] & {
+   category?: Database['public']['Tables']['categories']['Row'] | null;
+ };
+ 
+-// Export Category IDs for UI
+-// Export Category IDs for UI
+ export const CATEGORY_IDS = {
+   BENTO: 1,
+   DRINK: 2,
+@@ -14,8 +12,8 @@ export const CATEGORY_IDS = {
+   NOODLE: 7,
+   ONIGIRI: 8,
+   BREAD: 9,
+-  SALAD: 6, // Mapped to Deli
+-  DESSERT: 3, // Mapped to Snack
++  SALAD: 6, 
++  DESSERT: 3, 
+   OTHERS: 5,
+ };
+ 
+@@ -29,7 +27,6 @@ export const CATEGORY_LABELS = {
+   BREAD: '繝代Φ',
+ };
+ 
+-// Category IDs (Private use for constraints logic)
+ const CAT_BENTO   = CATEGORY_IDS.BENTO;
+ const CAT_DRINK   = CATEGORY_IDS.DRINK;
+ const CAT_DELI    = CATEGORY_IDS.DELI;
+@@ -68,7 +65,7 @@ export const fillBudget = (
+     if (p.category_id) counts[p.category_id] = (counts[p.category_id] || 0) + 1;
+   });
+ 
+-  // 蛻ｶ邏・メ繧ｧ繝・き繝ｼ
++  // 蛻ｶ邏・メ繧ｧ繝・き
+   const canAdd = (p: Product, currentCounts: CategoryCounts): boolean => {
+     if (!p.category_id) return true; // 繧ｫ繝・ざ繝ｪ縺ｪ縺励・荳譌ｦ險ｱ蜿ｯ
+     
+diff --git a/src/types/schema.ts b/src/types/schema.ts
+index 5dbb99d..a5d199e 100644
+--- a/src/types/schema.ts
++++ b/src/types/schema.ts
+@@ -143,5 +143,35 @@ export interface Database {
+         ]
+       }
+     }
++    Views: {
++      [_ in never]: never
++    }
++    Functions: {
++      get_active_products_random: {
++        Args: { row_limit?: number }
++        Returns: {
++          id: string
++          name: string
++          price: number
++          category_id: number | null
++          image_url: string | null
++          is_active: boolean
++          is_verified: boolean
++          is_recommended: boolean
++          is_temporary: boolean
++          expires_at: string | null
++          created_at: string
++          category_name: string | null
++          category_slug: string | null
++          category_recommendation_weight: number | null
++        }[]
++      }
++    }
++    Enums: {
++      [_ in never]: never
++    }
++    CompositeTypes: {
++      [_ in never]: never
++    }
+   }
+ }

@@ -4,8 +4,6 @@ type Product = Database['public']['Tables']['products']['Row'] & {
   category?: Database['public']['Tables']['categories']['Row'] | null;
 };
 
-// Export Category IDs for UI
-// Export Category IDs for UI
 export const CATEGORY_IDS = {
   BENTO: 1,
   DRINK: 2,
@@ -14,8 +12,8 @@ export const CATEGORY_IDS = {
   NOODLE: 7,
   ONIGIRI: 8,
   BREAD: 9,
-  SALAD: 6, // Mapped to Deli
-  DESSERT: 3, // Mapped to Snack
+  SALAD: 6, 
+  DESSERT: 3, 
   OTHERS: 5,
 };
 
@@ -29,7 +27,6 @@ export const CATEGORY_LABELS = {
   BREAD: 'パン',
 };
 
-// Category IDs (Private use for constraints logic)
 const CAT_BENTO   = CATEGORY_IDS.BENTO;
 const CAT_DRINK   = CATEGORY_IDS.DRINK;
 const CAT_DELI    = CATEGORY_IDS.DELI;
@@ -68,7 +65,7 @@ export const fillBudget = (
     if (p.category_id) counts[p.category_id] = (counts[p.category_id] || 0) + 1;
   });
 
-  // 制約チェッカー
+  // 制約チェッカ
   const canAdd = (p: Product, currentCounts: CategoryCounts): boolean => {
     if (!p.category_id) return true; // カテゴリなしは一旦許可
     
